@@ -1,0 +1,57 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import site from '../data/site.json';
+---
+
+<BaseLayout title="Contacto" description={`Contacto — ${site.brand.name}`}>
+  <main class="page">
+    <header class="page-header">
+      <h1>Contacto</h1>
+      <p>Contame sobre tu evento, tu caballo o el trabajo que tenés en mente.</p>
+    </header>
+
+    <form class="contact-form" data-contact-form>
+      <div class="field">
+        <label for="name">Nombre *</label>
+        <input id="name" name="name" type="text" placeholder="Tu nombre..." required autocomplete="name" />
+      </div>
+      <div class="field">
+        <label for="email">Email *</label>
+        <input id="email" name="email" type="email" placeholder="Tu email..." required autocomplete="email" />
+      </div>
+      <div class="field">
+        <label for="message">Mensaje *</label>
+        <textarea id="message" name="message" rows="6" placeholder="Tu mensaje..." required></textarea>
+      </div>
+      <button class="btn btn-block" type="submit">Enviar</button>
+      <p class="form-note">Respuesta por mail. Si preferís WhatsApp, dejalo aclarado en el mensaje.</p>
+    </form>
+
+    <div class="form-success" data-contact-success>Gracias. Te escribo pronto.</div>
+  </main>
+</BaseLayout>
+
+<script>
+  const form = document.querySelector('[data-contact-form]');
+  const ok = document.querySelector('[data-contact-success]');
+  form?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const data = new FormData(form);
+    const name = String(data.get('name') || '').trim();
+    const email = String(data.get('email') || '').trim();
+    const message = String(data.get('message') || '').trim();
+    if (!name || !email || !message) return;
+
+    // Mailto fallback until a form backend is wired.
+    const subject = encodeURIComponent(`Consulta web — ${name}`);
+    const body = encodeURIComponent(`${message}\n\n— ${name}\n${email}`);
+    const mail = 'mailto:?subject=' + subject + '&body=' + body;
+    // Keep UX local: show thanks; user can still open mail client if configured.
+    form.style.display = 'none';
+    ok?.classList.add('is-visible');
+    try {
+      // Prefer opening mail if the OS handles it; ignore failures.
+      window.location.href = mail;
+    } catch {}
+  });
+</script>

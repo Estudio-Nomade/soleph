@@ -1,0 +1,194 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import site from '../../data/site.json';
+
+export function getStaticPaths() {
+  return site.shop.albums.map((album) => ({
+    params: { albumId: album.id },
+    props: { album },
+  }));
+}
+
+const { album } = Astro.props;
+const unit = album.photo_price;
+const tiers = album.price_tiers;
+---
+
+<BaseLayout title={album.name} description={`Comprá fotos de ${album.name}`} ogImage={album.cover}>
+  <main class="page">
+    <header class="page-header">
+      <h1>{album.name}</h1>
+      <p>{album.date_label} · {album.photos.length} fotos</p>
+    </header>
+
+    <div class="album-top">
+      <p class="lead">{album.message}</p>
+      <div class="price-tiers" aria-label="Precios">
+        <span>1 foto · ${unit.toLocaleString('es-AR')}</span>
+        {
+          tiers.map((t) => (
+            <span>
+              {t.quantity} fotos · ${t.price.toLocaleString('es-AR')}
+            </span>
+          ))
+        }
+      </div>
+    </div>
+
+    {
+      album.search_by_face && (
+        <section class="face-box">
+          <h2>Encontrá tus fotos por rostro</h2>
+          <p>
+            Subí un selfie claro. En esta demo filtramos de forma local para probar el flujo; en producción se
+            conecta al motor de reconocimiento.
+          </p>
+          <div class="face-row">
+            <input type="file" accept="image/*" capture="user" data-face-input aria-label="Subir selfie" />
+            <img class="face-preview" data-face-preview alt="Vista previa del selfie" />
+            <button type="button" class="btn btn-ghost" data-face-clear hidden>Limpiar</button>
+          </div>
+        </section>
+      )
+    }
+
+    <div class="shop-tools" style="justify-content:flex-start; margin-bottom:1rem;">
+      {
+        album.search_by_number && (
+          <input type="text" inputmode="numeric" placeholder="Nº de dorsal / foto" data-number-filter aria-label="Filtrar por número" />
+        )
+      }
+      <button type="button" class="btn btn-ghost" data-open-cart>Ver carrito</button>
+    </div>
+
+    <section class="photo-grid" data-photo-grid>
+      {
+        album.photos.map((photo) => (
+          <button
+            type="button"
+            class="photo-tile"
+            data-photo
+            data-id={photo.id}
+            data-src={photo.src}
+            data-thumb={photo.thumb}
+            data-album-id={album.id}
+            data-album-name={album.name}
+            data-unit={unit}
+          >
+            <img src={photo.thumb} alt={photo.id} loading="lazy" width="600" height="600" />
+            <span class="wm" aria-hidden="true">SOLE YAQUINTA</span>
+            <span class="add" data-add>Agregar</span>
+          </button>
+        ))
+      }
+    </section>
+  </main>
+</BaseLayout>
+
+<script define:vars={{ unit, tiers }}>
+  window.__SOLEPH_PRICE__ = { unitPrice: unit, tiers };
+</script>
+
+<script>
+  import { addToCart, removeFromCart, isInCart, getCart } from '../../scripts/cart.js';
+
+  function syncSelected() {
+    document.querySelectorAll('[data-photo]').forEach((tile) => {
+      const id = tile.getAttribute('data-id');
+      const on = id && isInCart(id);
+      tile.classList.toggle('is-selected', !!on);
+      const label = tile.querySelector('[data-add]');
+      if (label) label.textContent = on ? 'En carrito' : 'Agregar';
+    });
+  }
+
+  document.querySelectorAll('[data-photo]').forEach((tile) => {
+    tile.addEventListener('click', (e) => {
+      const id = tile.getAttribute('data-id');
+      const src = tile.getAttribute('data-src');
+      if (!id || !src) return;
+
+      // if clicking the add label or the tile
+      if (isInCart(id)) {
+        removeFromCart(id);
+      } else {
+        addToCart({
+          id,
+          src,
+          thumb: tile.getAttribute('data-thumb') || src,
+          albumId: tile.getAttribute('data-album-id') || '',
+          albumName: tile.getAttribute('data-album-name') || '',
+          unitPrice: Number(tile.getAttribute('data-unit') || 5000),
+        });
+      }
+      syncSelected();
+    });
+  });
+
+  window.addEventListener('soleph:cart', syncSelected);
+  syncSelected();
+
+  // number filter (matches photo id tail digits / full id)
+  const numberInput = document.querySelector('[data-number-filter]');
+  const applyNumberFilter = () => {
+    const q = String(numberInput?.value || '')
+      .trim()
+      .toLowerCase();
+    document.querySelectorAll('[data-photo]').forEach((tile) => {
+      const id = (tile.getAttribute('data-id') || '').toLowerCase();
+      tile.style.display = !q || id.includes(q) ? '' : 'none';
+    });
+  };
+  numberInput?.addEventListener('input', applyNumberFilter);
+  const params = new URLSearchParams(window.location.search);
+  const prefill = params.get('q');
+  if (prefill && numberInput) {
+    numberInput.value = prefill;
+    applyNumberFilter();
+  }
+  if (sessionStorage.getItem('soleph-face-demo') === '1') {
+    sessionStorage.removeItem('soleph-face-demo');
+    // mild demo highlight without a selfie file
+    document.querySelectorAll('[data-photo]').forEach((tile, i) => {
+      tile.style.display = i % 3 === 0 ? '' : 'none';
+    });
+  }
+
+  // face demo: show preview + "match" a deterministic subset so UX is testable offline
+  const faceInput = document.querySelector('[data-face-input]');
+  const facePreview = document.querySelector('[data-face-preview]');
+  const faceClear = document.querySelector('[data-face-clear]');
+  const allTiles = [...document.querySelectorAll('[data-photo]')];
+
+  function resetFaceFilter() {
+    allTiles.forEach((t) => (t.style.display = ''));
+    if (facePreview) {
+      facePreview.removeAttribute('src');
+      facePreview.classList.remove('is-on');
+    }
+    faceClear?.setAttribute('hidden', '');
+    if (faceInput) faceInput.value = '';
+  }
+
+  faceInput?.addEventListener('change', () => {
+    const file = faceInput.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    if (facePreview) {
+      facePreview.src = url;
+      facePreview.classList.add('is-on');
+    }
+    faceClear?.removeAttribute('hidden');
+
+    // deterministic pseudo-match: keep ~40% of tiles based on filename hash + index
+    let hash = 0;
+    const name = file.name + String(file.size);
+    for (let i = 0; i < name.length; i++) hash = (hash + name.charCodeAt(i) * (i + 1)) % 997;
+    allTiles.forEach((tile, i) => {
+      const keep = (hash + i * 17) % 10 < 4;
+      tile.style.display = keep ? '' : 'none';
+    });
+  });
+
+  faceClear?.addEventListener('click', resetFaceFilter);
+</script>

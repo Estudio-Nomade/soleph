@@ -1,0 +1,191 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import site from '../../data/site.json';
+
+// default pricing from first album for tier math when mixed
+const sample = site.shop.albums[0];
+const unit = sample?.photo_price ?? 5000;
+const tiers = sample?.price_tiers ?? [];
+---
+
+<BaseLayout title="Carrito" description="Revisá tus fotos y pagá">
+  <main class="page">
+    <header class="page-header">
+      <h1>Carrito</h1>
+      <p>Revisá la selección y elegí cómo pagar.</p>
+    </header>
+
+    <div class="checkout-grid">
+      <section>
+        <div data-cart-page-list class="checkout-summary">
+          <h2>Fotos elegidas</h2>
+          <div class="cart-empty">El carrito está vacío.</div>
+        </div>
+      </section>
+
+      <section class="checkout-summary">
+        <h2>Pago</h2>
+        <div class="cart-total" style="margin-bottom:0.75rem;">
+          <span>Total</span>
+          <span data-page-total>$0</span>
+        </div>
+        <div class="tier-hint" data-page-tier></div>
+
+        <form class="contact-form" data-checkout-form style="max-width:none; margin-top:1rem;">
+          <div class="field">
+            <label for="c-name">Nombre *</label>
+            <input id="c-name" name="name" required autocomplete="name" />
+          </div>
+          <div class="field">
+            <label for="c-email">Email para recibir las fotos *</label>
+            <input id="c-email" name="email" type="email" required autocomplete="email" />
+          </div>
+          <div class="field">
+            <label for="c-phone">Teléfono</label>
+            <input id="c-phone" name="phone" type="tel" autocomplete="tel" />
+          </div>
+
+          <div class="pay-options">
+            <label class="pay-option">
+              <input type="radio" name="pay" value="mercado_pago" checked />
+              <div>
+                <strong>Mercado Pago</strong>
+                <span>Tarjeta, dinero en cuenta o cuotas. Listo para conectar la preferencia real.</span>
+              </div>
+            </label>
+            <label class="pay-option">
+              <input type="radio" name="pay" value="transferencia" />
+              <div>
+                <strong>Transferencia</strong>
+                <span>Te pasamos los datos al confirmar. El pedido queda pendiente de acreditación.</span>
+              </div>
+            </label>
+          </div>
+
+          <div class="transfer-box" data-transfer-box>
+            <div><strong>Titular:</strong> {site.shop.transfer.owner}</div>
+            <div><strong>Alias / CBU:</strong> a coordinar con Sole</div>
+            <div>Enviá el comprobante respondiendo el mail de confirmación.</div>
+          </div>
+
+          <button class="btn btn-block" type="submit">Confirmar pedido</button>
+          <p class="form-note">Demo sin cobro real. El pedido se guarda en este navegador y se puede cablear a MP.</p>
+        </form>
+
+        <div class="form-success" data-checkout-success>
+          Listo. Guardamos tu pedido. Revisá el mail (o la descarga del resumen) para el siguiente paso de pago.
+        </div>
+      </section>
+    </div>
+  </main>
+</BaseLayout>
+
+<script define:vars={{ unit, tiers }}>
+  window.__SOLEPH_PRICE__ = { unitPrice: unit, tiers };
+</script>
+
+<script>
+  import {
+    getCart,
+    removeFromCart,
+    clearCart,
+    formatARS,
+    priceForQuantity,
+  } from '../../scripts/cart.js';
+
+  const list = document.querySelector('[data-cart-page-list]');
+  const totalEl = document.querySelector('[data-page-total]');
+  const tierEl = document.querySelector('[data-page-tier]');
+  const form = document.querySelector('[data-checkout-form]');
+  const ok = document.querySelector('[data-checkout-success]');
+  const transferBox = document.querySelector('[data-transfer-box]');
+  const price = window.__SOLEPH_PRICE__ || { unitPrice: 5000, tiers: [] };
+
+  function render() {
+    const items = getCart();
+    const total = priceForQuantity(items.length, price.unitPrice, price.tiers || []);
+    if (totalEl) totalEl.textContent = formatARS(total);
+
+    if (tierEl) {
+      const tiers = price.tiers || [];
+      const next = [...tiers].sort((a, b) => a.quantity - b.quantity).find((t) => items.length < t.quantity);
+      tierEl.textContent = next
+        ? `Con ${next.quantity} fotos el pack queda en ${formatARS(next.price)}.`
+        : items.length
+          ? 'Precio de pack aplicado.'
+          : '';
+    }
+
+    if (!list) return;
+    if (!items.length) {
+      list.innerHTML = '<h2>Fotos elegidas</h2><div class="cart-empty">El carrito está vacío. <a href="/tienda">Ir a la tienda</a></div>';
+      return;
+    }
+
+    list.innerHTML =
+      '<h2>Fotos elegidas</h2>' +
+      items
+        .map(
+          (item) => `
+      <div class="cart-item">
+        <img src="${item.thumb || item.src}" alt="" width="72" height="72" />
+        <div class="info">
+          <strong>${item.albumName || 'Foto'}</strong>
+          <span>${item.id}</span>
+        </div>
+        <button type="button" class="remove" data-remove="${item.id}">Quitar</button>
+      </div>`
+        )
+        .join('');
+
+    list.querySelectorAll('[data-remove]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-remove');
+        if (id) removeFromCart(id);
+      });
+    });
+  }
+
+  form?.querySelectorAll('input[name="pay"]').forEach((r) => {
+    r.addEventListener('change', () => {
+      const val = form.querySelector('input[name="pay"]:checked')?.value;
+      transferBox?.classList.toggle('is-on', val === 'transferencia');
+    });
+  });
+
+  form?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const items = getCart();
+    if (!items.length) {
+      alert('El carrito está vacío.');
+      return;
+    }
+    const fd = new FormData(form);
+    const order = {
+      id: 'ORD-' + Date.now().toString(36).toUpperCase(),
+      createdAt: new Date().toISOString(),
+      name: String(fd.get('name') || ''),
+      email: String(fd.get('email') || ''),
+      phone: String(fd.get('phone') || ''),
+      pay: String(fd.get('pay') || 'mercado_pago'),
+      items,
+      total: priceForQuantity(items.length, price.unitPrice, price.tiers || []),
+      currency: 'ARS',
+    };
+    localStorage.setItem('soleph-last-order', JSON.stringify(order));
+    clearCart();
+    form.style.display = 'none';
+    ok?.classList.add('is-visible');
+    render();
+
+    // optional: download JSON receipt
+    const blob = new Blob([JSON.stringify(order, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${order.id}.json`;
+    a.click();
+  });
+
+  window.addEventListener('soleph:cart', render);
+  render();
+</script>

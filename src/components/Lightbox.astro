@@ -1,0 +1,67 @@
+---
+---
+
+<div class="lightbox" data-lightbox aria-hidden="true">
+  <button type="button" class="close" data-lightbox-close aria-label="Cerrar">×</button>
+  <button type="button" class="nav prev" data-lightbox-prev aria-label="Anterior">‹</button>
+  <img src="" alt="" data-lightbox-img />
+  <button type="button" class="nav next" data-lightbox-next aria-label="Siguiente">›</button>
+</div>
+
+<script>
+  const root = document.querySelector('[data-lightbox]');
+  const img = document.querySelector('[data-lightbox-img]');
+  let sources = [];
+  let index = 0;
+
+  function open(list, start = 0) {
+    sources = list;
+    index = start;
+    show();
+    root?.classList.add('is-open');
+    root?.setAttribute('aria-hidden', 'false');
+  }
+
+  function close() {
+    root?.classList.remove('is-open');
+    root?.setAttribute('aria-hidden', 'true');
+  }
+
+  function show() {
+    if (!img || !sources.length) return;
+    img.setAttribute('src', sources[index]);
+  }
+
+  function next() {
+    if (!sources.length) return;
+    index = (index + 1) % sources.length;
+    show();
+  }
+
+  function prev() {
+    if (!sources.length) return;
+    index = (index - 1 + sources.length) % sources.length;
+    show();
+  }
+
+  document.querySelector('[data-lightbox-close]')?.addEventListener('click', close);
+  document.querySelector('[data-lightbox-next]')?.addEventListener('click', next);
+  document.querySelector('[data-lightbox-prev]')?.addEventListener('click', prev);
+  root?.addEventListener('click', (e) => {
+    if (e.target === root) close();
+  });
+  window.addEventListener('keydown', (e) => {
+    if (!root?.classList.contains('is-open')) return;
+    if (e.key === 'Escape') close();
+    if (e.key === 'ArrowRight') next();
+    if (e.key === 'ArrowLeft') prev();
+  });
+
+  document.querySelectorAll('[data-gallery]').forEach((gallery) => {
+    const figs = [...gallery.querySelectorAll('figure[data-full]')];
+    const list = figs.map((f) => f.getAttribute('data-full')).filter(Boolean);
+    figs.forEach((fig, i) => {
+      fig.addEventListener('click', () => open(list, i));
+    });
+  });
+</script>

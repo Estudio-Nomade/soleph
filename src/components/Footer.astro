@@ -1,0 +1,11 @@
+---
+import site from '../data/site.json';
+const year = new Date().getFullYear();
+---
+
+<footer class="site-footer">
+  <a class="back-top" href="#top">↑ Volver arriba</a>
+  <div class="brand">{site.brand.name.toUpperCase()}</div>
+  <div>{site.brand.location}</div>
+  <div>© {year}</div>
+</footer>

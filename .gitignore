@@ -1,24 +1,42 @@
-# build output
-dist/
-# generated types
-.astro/
-
-# dependencies
+# Dependencias
 node_modules/
 
-# logs
+# Builds y artefactos
+.astro/
+dist/
+build/
+out/
+.vercel/
+.netlify/
+*.tsbuildinfo
+
+# Environment (secretos — NUNCA commitear)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-
-# environment variables
-.env
-.env.production
-
-# macOS-specific files
+# Sistema operativo
 .DS_Store
+Thumbs.db
 
-# jetbrains setting folder
+# Editores / IDEs
+.vscode/
 .idea/
+*.swp
+*.swo
+
+# Testing / coverage
+coverage/
+test-results/
+playwright-report/
+
+# Runtime local
+node_modules/.cache/
+.pnpm-store/

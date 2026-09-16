@@ -1,0 +1,84 @@
+---
+import site from '../data/site.json';
+
+const pathname = Astro.url.pathname.replace(/\/$/, '') || '/';
+
+function isActive(href: string) {
+  const h = href.replace(/\/$/, '') || '/';
+  if (h === '/') return pathname === '/';
+  return pathname === h || pathname.startsWith(h + '/');
+}
+---
+
+<header class="site-header" id="site-header" data-header>
+  <div class="header-left">
+    <nav aria-label="Principal">
+      <ul class="nav-desktop">
+        {
+          site.nav.map((item) => (
+            <li>
+              <a href={item.href} aria-current={isActive(item.href) ? 'page' : undefined}>
+                {item.label}
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </nav>
+  </div>
+
+  <a class="logo-link" href="/" aria-label={site.brand.name}>
+    <img src="/images/logo.png" alt={site.brand.name} width="120" height="100" />
+  </a>
+
+  <div class="header-right">
+    <button type="button" class="cart-chip" data-open-cart aria-label="Carrito">
+      Carrito
+      <span class="count" data-cart-count data-count="0"></span>
+    </button>
+    <button type="button" class="hamburger" data-menu-toggle aria-label="Menú" aria-expanded="false">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  </div>
+</header>
+
+<div class="nav-mobile" id="nav-mobile">
+  {
+    site.nav.map((item) => (
+      <a href={item.href} aria-current={isActive(item.href) ? 'page' : undefined}>
+        {item.label}
+      </a>
+    ))
+  }
+  <a href="/tienda/carrito">Carrito</a>
+</div>
+<div class="header-spacer"></div>
+
+<script>
+  const header = document.querySelector('[data-header]');
+  const toggle = document.querySelector('[data-menu-toggle]');
+  const mobile = document.getElementById('nav-mobile');
+
+  const onScroll = () => {
+    if (!header) return;
+    header.classList.toggle('is-scrolled', window.scrollY > 8);
+  };
+  onScroll();
+  window.addEventListener('scroll', onScroll, { passive: true });
+
+  toggle?.addEventListener('click', () => {
+    const open = mobile?.classList.toggle('is-open');
+    if (mobile) mobile.hidden = !open;
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+
+  mobile?.querySelectorAll('a').forEach((a) => {
+    a.addEventListener('click', () => {
+      mobile.classList.remove('is-open');
+      mobile.hidden = true;
+      toggle?.setAttribute('aria-expanded', 'false');
+    });
+  });
+</script>

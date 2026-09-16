@@ -1,43 +1,46 @@
-# Astro Starter Kit: Minimal
+# Soleph — portfolio + tienda de fotos (Sole Yaquinta)
 
-```sh
-npm create astro@latest -- --template minimal
+Sitio Astro para Sole Yaquinta: portfolio fotográfico (contenido real migrado de Adobe Portfolio) y tienda de venta de fotos de eventos con flujo tipo FullFoto (álbumes, carrito, packs, checkout demo MP/transferencia).
+
+## Stack
+
+- Astro 7 (static)
+- CSS propio (tokens de marca Sole: navy `#012B55`)
+- Carrito en `localStorage` (sin backend todavía)
+- Imágenes en `public/images` (descargadas del portfolio original)
+
+## Scripts
+
+```bash
+npm install
+npm run dev
+npm run build
+npm run preview
 ```
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+## Rutas
 
-## 🚀 Project Structure
+| Ruta | Qué es |
+|------|--------|
+| `/` | Work — grilla de proyectos |
+| `/proyecto/[slug]` | Galería de proyecto + lightbox |
+| `/sobre-mi` | Bio real |
+| `/contacto` | Formulario |
+| `/tienda` | Listado de álbumes/eventos |
+| `/tienda/buscar` | Entrada dorsal / selfie |
+| `/tienda/[albumId]` | Grid de fotos, watermark, carrito |
+| `/tienda/carrito` | Checkout demo |
 
-Inside of your Astro project, you'll see the following folders and files:
+## Datos
 
-```text
-/
-├── public/
-├── src/
-│   └── pages/
-│       └── index.astro
-└── package.json
-```
+Fuente de verdad de contenido: `src/data/site.json`.
 
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
+## Estado
 
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
+- Portfolio: contenido real de Sole (proyectos, textos, logo, fotos).
+- Tienda: UX de compra lista; pago Mercado Pago queda cableable (preferencia server-side). Reconocimiento facial = demo local hasta conectar proveedor.
+- Contacto: submit muestra gracias + `mailto` fallback.
 
-Any static assets, like images, can be placed in the `public/` directory.
+## Repo
 
-## 🧞 Commands
-
-All commands are run from the root of the project, from a terminal:
-
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
-
-## 👀 Want to learn more?
-
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+Estudio Nómade · privado por defecto.

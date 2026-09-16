@@ -1,17 +1,34 @@
 ---
-
+import BaseLayout from '../layouts/BaseLayout.astro';
+import site from '../data/site.json';
 ---
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-	</body>
-</html>
+<BaseLayout title={site.brand.name} description={`${site.brand.name} — fotografía de naturaleza, deporte ecuestre y vida rural.`}>
+  <main class="page">
+    <header class="page-header">
+      <h1 class="sr-only">{site.brand.name}</h1>
+      <p>{site.brand.tagline}</p>
+    </header>
+
+    <section class="work-grid" aria-label="Proyectos">
+      {
+        site.projects.map((project) => (
+          <a class="work-card" href={project.href}>
+            <img class="cover" src={project.cover} alt={project.title} loading="lazy" width="1200" height="900" />
+            <div class="meta">
+              <div class="title">{project.title}</div>
+              <div class="year">{project.year}</div>
+            </div>
+          </a>
+        ))
+      }
+      <a class="work-card" href="/sobre-mi">
+        <img class="cover" src="/images/covers/sobre-mi.jpg" alt="Sobre mi" loading="lazy" width="1200" height="900" />
+        <div class="meta">
+          <div class="title">Sobre mi</div>
+          <div class="year">2026</div>
+        </div>
+      </a>
+    </section>
+  </main>
+</BaseLayout>

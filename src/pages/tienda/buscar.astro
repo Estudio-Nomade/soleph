@@ -1,0 +1,79 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import site from '../../data/site.json';
+---
+
+<BaseLayout title="Buscar mis fotos" description="Encontrá tus fotos por selfie o por número de dorsal.">
+  <main class="page">
+    <header class="page-header">
+      <h1>Buscar mis fotos</h1>
+      <p>Elegí un evento y buscá por dorsal o por selfie, como en las tiendas de foto de competencia.</p>
+    </header>
+
+    <section class="face-box">
+      <h2>1. Elegí el evento</h2>
+      <div class="shop-tools" style="justify-content:flex-start;">
+        <select data-event-select aria-label="Evento">
+          <option value="">Todos los eventos</option>
+          {
+            site.shop.albums.map((a) => (
+              <option value={a.id}>
+                {a.name} ({a.photos.length})
+              </option>
+            ))
+          }
+        </select>
+      </div>
+    </section>
+
+    <section class="face-box">
+      <h2>2. Buscar por dorsal</h2>
+      <p>Si sabés el número, es lo más rápido.</p>
+      <div class="face-row">
+        <input type="text" inputmode="numeric" placeholder="Ej: 12" data-dorsal aria-label="Dorsal" />
+        <button type="button" class="btn" data-go-dorsal>Buscar</button>
+      </div>
+    </section>
+
+    <section class="face-box">
+      <h2>3. Buscar por rostro</h2>
+      <p>Subí un selfie. Al continuar vas al álbum con el filtro de prueba activado.</p>
+      <div class="face-row">
+        <input type="file" accept="image/*" capture="user" data-selfie aria-label="Selfie" />
+        <button type="button" class="btn" data-go-face>Continuar</button>
+      </div>
+    </section>
+
+    <p class="form-note">
+      El reconocimiento facial real se conecta después (API propia o proveedor). Acá ya queda el flujo de UX y el carrito.
+    </p>
+  </main>
+</BaseLayout>
+
+<script>
+  const select = document.querySelector('[data-event-select]');
+  const dorsal = document.querySelector('[data-dorsal]');
+  const selfie = document.querySelector('[data-selfie]');
+
+  function targetAlbum() {
+    const v = select?.value;
+    if (v) return `/tienda/${v}`;
+    // default first album
+    const first = select?.querySelector('option[value]:not([value=""])')?.getAttribute('value');
+    return first ? `/tienda/${first}` : '/tienda';
+  }
+
+  document.querySelector('[data-go-dorsal]')?.addEventListener('click', () => {
+    const q = encodeURIComponent(String(dorsal?.value || '').trim());
+    const base = targetAlbum();
+    window.location.href = q ? `${base}?q=${q}` : base;
+  });
+
+  document.querySelector('[data-go-face]')?.addEventListener('click', () => {
+    // stash a flag; album page can read it. Selfie itself can't persist easily without server.
+    sessionStorage.setItem('soleph-face-demo', '1');
+    window.location.href = targetAlbum();
+  });
+
+  // if arriving with ?q= on album pages is handled there; here just UX
+</script>

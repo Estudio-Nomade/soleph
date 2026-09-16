@@ -1,0 +1,40 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import site from '../data/site.json';
+
+const paragraphs = site.about.body.split(/\n+/).filter(Boolean);
+---
+
+<BaseLayout title="Sobre mi" description={paragraphs[0]} ogImage={site.about.image}>
+  <main class="page">
+    <header class="page-header">
+      <h1>{site.about.title}</h1>
+    </header>
+
+    <div class="about-layout">
+      <div class="about-copy">
+        {paragraphs.map((p) => <p>{p}</p>)}
+      </div>
+      <div class="about-photo">
+        <img src={site.about.image} alt={site.brand.name} width="1200" height="1500" loading="eager" />
+      </div>
+    </div>
+
+    <section class="related" style="margin-top: 3rem;">
+      <h2>También te puede interesar</h2>
+      <div class="related-grid">
+        {
+          site.projects.slice(0, 3).map((p) => (
+            <a class="related-card" href={p.href}>
+              <img src={p.cover} alt={p.title} loading="lazy" width="800" height="600" />
+              <div class="label">
+                <strong>{p.title}</strong>
+                <span>{p.year}</span>
+              </div>
+            </a>
+          ))
+        }
+      </div>
+    </section>
+  </main>
+</BaseLayout>

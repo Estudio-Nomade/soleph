@@ -1,0 +1,430 @@
+{
+  "brand": {
+    "name": "Sole Yaquinta",
+    "tagline": "FOTOGRAFIA",
+    "location": "Tandil, Buenos Aires, Argentina",
+    "email": null,
+    "instagram": null,
+    "colors": {
+      "navy": "#012B55",
+      "navyHover": "#546E87",
+      "muted": "#91A1B4",
+      "bg": "#FFFFFF",
+      "ink": "#0E2032",
+      "soft": "#B0BDCB"
+    }
+  },
+  "about": {
+    "title": "Sobre mi",
+    "body": "Me dedico especialmente a fotografiar la naturaleza, los deportes ecuestres y la vida rural.\nA través de la fotografía busco capturar momentos auténticos y transmitir mi manera de ver el mundo que me rodea: la conexión entre las personas, los animales y el paisaje.\nNací en Tandil, Buenos Aires, Argentina, un lugar rodeado de naturaleza y animales que marcó profundamente mi forma de mirar y de contar historias a través de la cámara. Esa cercanía con el campo y la vida rural es hoy la esencia de mi trabajo.\nRealizo proyectos personales y trabajos por encargo vinculados a la vida rural, actividades de campo y deportes ecuestres, tanto para particulares como para emprendimientos, criadores, jinetes, eventos y marcas relacionadas con este ámbito.",
+    "image": "/images/sobre-mi.jpg"
+  },
+  "nav": [
+    {
+      "label": "Work",
+      "href": "/"
+    },
+    {
+      "label": "Tienda",
+      "href": "/tienda"
+    },
+    {
+      "label": "Sobre mi",
+      "href": "/sobre-mi"
+    },
+    {
+      "label": "Contacto",
+      "href": "/contacto"
+    }
+  ],
+  "projects": [
+    {
+      "slug": "paisajes",
+      "title": "PAISAJES",
+      "year": 2026,
+      "cover": "/images/covers/paisajes.jpg",
+      "images": [
+        "/images/projects/paisajes/01.jpg",
+        "/images/projects/paisajes/02.jpg",
+        "/images/projects/paisajes/03.jpg",
+        "/images/projects/paisajes/04.jpg",
+        "/images/projects/paisajes/05.jpg",
+        "/images/projects/paisajes/06.jpg"
+      ],
+      "href": "/proyecto/paisajes"
+    },
+    {
+      "slug": "cordillera",
+      "title": "Cordillera de los Andes",
+      "year": 2026,
+      "cover": "/images/covers/cordillera.jpg",
+      "images": [
+        "/images/projects/cordillera/01.jpg",
+        "/images/projects/cordillera/02.jpg",
+        "/images/projects/cordillera/03.jpg",
+        "/images/projects/cordillera/04.jpg",
+        "/images/projects/cordillera/05.jpg",
+        "/images/projects/cordillera/06.jpg",
+        "/images/projects/cordillera/07.jpg",
+        "/images/projects/cordillera/08.jpg",
+        "/images/projects/cordillera/09.jpg",
+        "/images/projects/cordillera/10.jpg",
+        "/images/projects/cordillera/11.jpg",
+        "/images/projects/cordillera/12.jpg",
+        "/images/projects/cordillera/13.jpg"
+      ],
+      "href": "/proyecto/cordillera"
+    },
+    {
+      "slug": "pruebas-de-riendas",
+      "title": "Deporte ecuestre",
+      "year": 2026,
+      "cover": "/images/covers/pruebas-de-riendas.jpg",
+      "images": [
+        "/images/projects/pruebas-de-riendas/01.jpg",
+        "/images/projects/pruebas-de-riendas/02.jpg",
+        "/images/projects/pruebas-de-riendas/03.jpg",
+        "/images/projects/pruebas-de-riendas/04.jpg",
+        "/images/projects/pruebas-de-riendas/05.jpg"
+      ],
+      "href": "/proyecto/pruebas-de-riendas"
+    },
+    {
+      "slug": "la-makeka",
+      "title": "LA MAKEKA",
+      "year": 2026,
+      "cover": "/images/covers/la-makeka.jpg",
+      "images": [
+        "/images/projects/la-makeka/01.jpg",
+        "/images/projects/la-makeka/02.jpg",
+        "/images/projects/la-makeka/03.jpg",
+        "/images/projects/la-makeka/04.jpg",
+        "/images/projects/la-makeka/05.jpg",
+        "/images/projects/la-makeka/06.jpg",
+        "/images/projects/la-makeka/07.jpg",
+        "/images/projects/la-makeka/08.jpg",
+        "/images/projects/la-makeka/09.jpg",
+        "/images/projects/la-makeka/10.jpg",
+        "/images/projects/la-makeka/11.jpg",
+        "/images/projects/la-makeka/12.jpg",
+        "/images/projects/la-makeka/13.jpg",
+        "/images/projects/la-makeka/14.jpg"
+      ],
+      "href": "/proyecto/la-makeka"
+    }
+  ],
+  "shop": {
+    "currency": "ARS",
+    "currencySymbol": "$",
+    "intro": "Buscá tus fotos por evento, por número de dorsal o subiendo un selfie. Elegí las que quieras y pagá online o por transferencia.",
+    "paymentMethods": [
+      "mercado_pago",
+      "transferencia"
+    ],
+    "transfer": {
+      "alias": null,
+      "cbu": null,
+      "owner": "Sole Yaquinta"
+    },
+    "albums": [
+      {
+        "id": "paisajes",
+        "name": "PAISAJES",
+        "date_label": "2026",
+        "cover": "/images/covers/paisajes.jpg",
+        "photo_count": 6,
+        "photos": [
+          {
+            "id": "paisajes-01",
+            "src": "/images/projects/paisajes/01.jpg",
+            "thumb": "/images/projects/paisajes/01.jpg"
+          },
+          {
+            "id": "paisajes-02",
+            "src": "/images/projects/paisajes/02.jpg",
+            "thumb": "/images/projects/paisajes/02.jpg"
+          },
+          {
+            "id": "paisajes-03",
+            "src": "/images/projects/paisajes/03.jpg",
+            "thumb": "/images/projects/paisajes/03.jpg"
+          },
+          {
+            "id": "paisajes-04",
+            "src": "/images/projects/paisajes/04.jpg",
+            "thumb": "/images/projects/paisajes/04.jpg"
+          },
+          {
+            "id": "paisajes-05",
+            "src": "/images/projects/paisajes/05.jpg",
+            "thumb": "/images/projects/paisajes/05.jpg"
+          },
+          {
+            "id": "paisajes-06",
+            "src": "/images/projects/paisajes/06.jpg",
+            "thumb": "/images/projects/paisajes/06.jpg"
+          }
+        ],
+        "photo_price": 5000,
+        "price_tiers": [
+          {
+            "quantity": 3,
+            "price": 10000
+          },
+          {
+            "quantity": 5,
+            "price": 15000
+          },
+          {
+            "quantity": 10,
+            "price": 25000
+          }
+        ],
+        "message": "Las fotografías se envían en alta resolución al email que registres. Podés usarlas en redes o imprimirlas por tu cuenta hasta 30×45 cm. Si querés un tamaño más grande, un cuadro o un fotolibro, escribinme y lo vemos.",
+        "search_by_face": true,
+        "search_by_number": true
+      },
+      {
+        "id": "cordillera",
+        "name": "Cordillera de los Andes",
+        "date_label": "2026",
+        "cover": "/images/covers/cordillera.jpg",
+        "photo_count": 13,
+        "photos": [
+          {
+            "id": "cordillera-01",
+            "src": "/images/projects/cordillera/01.jpg",
+            "thumb": "/images/projects/cordillera/01.jpg"
+          },
+          {
+            "id": "cordillera-02",
+            "src": "/images/projects/cordillera/02.jpg",
+            "thumb": "/images/projects/cordillera/02.jpg"
+          },
+          {
+            "id": "cordillera-03",
+            "src": "/images/projects/cordillera/03.jpg",
+            "thumb": "/images/projects/cordillera/03.jpg"
+          },
+          {
+            "id": "cordillera-04",
+            "src": "/images/projects/cordillera/04.jpg",
+            "thumb": "/images/projects/cordillera/04.jpg"
+          },
+          {
+            "id": "cordillera-05",
+            "src": "/images/projects/cordillera/05.jpg",
+            "thumb": "/images/projects/cordillera/05.jpg"
+          },
+          {
+            "id": "cordillera-06",
+            "src": "/images/projects/cordillera/06.jpg",
+            "thumb": "/images/projects/cordillera/06.jpg"
+          },
+          {
+            "id": "cordillera-07",
+            "src": "/images/projects/cordillera/07.jpg",
+            "thumb": "/images/projects/cordillera/07.jpg"
+          },
+          {
+            "id": "cordillera-08",
+            "src": "/images/projects/cordillera/08.jpg",
+            "thumb": "/images/projects/cordillera/08.jpg"
+          },
+          {
+            "id": "cordillera-09",
+            "src": "/images/projects/cordillera/09.jpg",
+            "thumb": "/images/projects/cordillera/09.jpg"
+          },
+          {
+            "id": "cordillera-10",
+            "src": "/images/projects/cordillera/10.jpg",
+            "thumb": "/images/projects/cordillera/10.jpg"
+          },
+          {
+            "id": "cordillera-11",
+            "src": "/images/projects/cordillera/11.jpg",
+            "thumb": "/images/projects/cordillera/11.jpg"
+          },
+          {
+            "id": "cordillera-12",
+            "src": "/images/projects/cordillera/12.jpg",
+            "thumb": "/images/projects/cordillera/12.jpg"
+          },
+          {
+            "id": "cordillera-13",
+            "src": "/images/projects/cordillera/13.jpg",
+            "thumb": "/images/projects/cordillera/13.jpg"
+          }
+        ],
+        "photo_price": 5000,
+        "price_tiers": [
+          {
+            "quantity": 3,
+            "price": 10000
+          },
+          {
+            "quantity": 5,
+            "price": 15000
+          },
+          {
+            "quantity": 10,
+            "price": 25000
+          }
+        ],
+        "message": "Las fotografías se envían en alta resolución al email que registres. Podés usarlas en redes o imprimirlas por tu cuenta hasta 30×45 cm. Si querés un tamaño más grande, un cuadro o un fotolibro, escribinme y lo vemos.",
+        "search_by_face": true,
+        "search_by_number": true
+      },
+      {
+        "id": "pruebas-de-riendas",
+        "name": "Deporte ecuestre",
+        "date_label": "2026",
+        "cover": "/images/covers/pruebas-de-riendas.jpg",
+        "photo_count": 5,
+        "photos": [
+          {
+            "id": "pruebas-de-riendas-01",
+            "src": "/images/projects/pruebas-de-riendas/01.jpg",
+            "thumb": "/images/projects/pruebas-de-riendas/01.jpg"
+          },
+          {
+            "id": "pruebas-de-riendas-02",
+            "src": "/images/projects/pruebas-de-riendas/02.jpg",
+            "thumb": "/images/projects/pruebas-de-riendas/02.jpg"
+          },
+          {
+            "id": "pruebas-de-riendas-03",
+            "src": "/images/projects/pruebas-de-riendas/03.jpg",
+            "thumb": "/images/projects/pruebas-de-riendas/03.jpg"
+          },
+          {
+            "id": "pruebas-de-riendas-04",
+            "src": "/images/projects/pruebas-de-riendas/04.jpg",
+            "thumb": "/images/projects/pruebas-de-riendas/04.jpg"
+          },
+          {
+            "id": "pruebas-de-riendas-05",
+            "src": "/images/projects/pruebas-de-riendas/05.jpg",
+            "thumb": "/images/projects/pruebas-de-riendas/05.jpg"
+          }
+        ],
+        "photo_price": 5000,
+        "price_tiers": [
+          {
+            "quantity": 3,
+            "price": 10000
+          },
+          {
+            "quantity": 5,
+            "price": 15000
+          },
+          {
+            "quantity": 10,
+            "price": 25000
+          }
+        ],
+        "message": "Las fotografías se envían en alta resolución al email que registres. Podés usarlas en redes o imprimirlas por tu cuenta hasta 30×45 cm. Si querés un tamaño más grande, un cuadro o un fotolibro, escribinme y lo vemos.",
+        "search_by_face": true,
+        "search_by_number": true
+      },
+      {
+        "id": "la-makeka",
+        "name": "LA MAKEKA",
+        "date_label": "2026",
+        "cover": "/images/covers/la-makeka.jpg",
+        "photo_count": 14,
+        "photos": [
+          {
+            "id": "la-makeka-01",
+            "src": "/images/projects/la-makeka/01.jpg",
+            "thumb": "/images/projects/la-makeka/01.jpg"
+          },
+          {
+            "id": "la-makeka-02",
+            "src": "/images/projects/la-makeka/02.jpg",
+            "thumb": "/images/projects/la-makeka/02.jpg"
+          },
+          {
+            "id": "la-makeka-03",
+            "src": "/images/projects/la-makeka/03.jpg",
+            "thumb": "/images/projects/la-makeka/03.jpg"
+          },
+          {
+            "id": "la-makeka-04",
+            "src": "/images/projects/la-makeka/04.jpg",
+            "thumb": "/images/projects/la-makeka/04.jpg"
+          },
+          {
+            "id": "la-makeka-05",
+            "src": "/images/projects/la-makeka/05.jpg",
+            "thumb": "/images/projects/la-makeka/05.jpg"
+          },
+          {
+            "id": "la-makeka-06",
+            "src": "/images/projects/la-makeka/06.jpg",
+            "thumb": "/images/projects/la-makeka/06.jpg"
+          },
+          {
+            "id": "la-makeka-07",
+            "src": "/images/projects/la-makeka/07.jpg",
+            "thumb": "/images/projects/la-makeka/07.jpg"
+          },
+          {
+            "id": "la-makeka-08",
+            "src": "/images/projects/la-makeka/08.jpg",
+            "thumb": "/images/projects/la-makeka/08.jpg"
+          },
+          {
+            "id": "la-makeka-09",
+            "src": "/images/projects/la-makeka/09.jpg",
+            "thumb": "/images/projects/la-makeka/09.jpg"
+          },
+          {
+            "id": "la-makeka-10",
+            "src": "/images/projects/la-makeka/10.jpg",
+            "thumb": "/images/projects/la-makeka/10.jpg"
+          },
+          {
+            "id": "la-makeka-11",
+            "src": "/images/projects/la-makeka/11.jpg",
+            "thumb": "/images/projects/la-makeka/11.jpg"
+          },
+          {
+            "id": "la-makeka-12",
+            "src": "/images/projects/la-makeka/12.jpg",
+            "thumb": "/images/projects/la-makeka/12.jpg"
+          },
+          {
+            "id": "la-makeka-13",
+            "src": "/images/projects/la-makeka/13.jpg",
+            "thumb": "/images/projects/la-makeka/13.jpg"
+          },
+          {
+            "id": "la-makeka-14",
+            "src": "/images/projects/la-makeka/14.jpg",
+            "thumb": "/images/projects/la-makeka/14.jpg"
+          }
+        ],
+        "photo_price": 5000,
+        "price_tiers": [
+          {
+            "quantity": 3,
+            "price": 10000
+          },
+          {
+            "quantity": 5,
+            "price": 15000
+          },
+          {
+            "quantity": 10,
+            "price": 25000
+          }
+        ],
+        "message": "Las fotografías se envían en alta resolución al email que registres. Podés usarlas en redes o imprimirlas por tu cuenta hasta 30×45 cm. Si querés un tamaño más grande, un cuadro o un fotolibro, escribinme y lo vemos.",
+        "search_by_face": true,
+        "search_by_number": true
+      }
+    ]
+  }
+}

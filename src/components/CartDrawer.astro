@@ -1,0 +1,129 @@
+---
+---
+
+<div class="cart-backdrop" data-cart-backdrop></div>
+<aside class="cart-drawer" data-cart-drawer aria-label="Carrito" aria-hidden="true">
+  <div class="cart-head">
+    <h2>Carrito</h2>
+    <button type="button" class="icon-btn" data-close-cart aria-label="Cerrar">×</button>
+  </div>
+  <div class="cart-body" data-cart-body>
+    <div class="cart-empty">Todavía no hay fotos.</div>
+  </div>
+  <div class="cart-foot">
+    <div class="tier-hint" data-cart-tier></div>
+    <div class="cart-total">
+      <span>Total</span>
+      <span data-cart-total>$0</span>
+    </div>
+    <a class="btn btn-block" href="/tienda/carrito">Ver carrito y pagar</a>
+  </div>
+</aside>
+
+<script>
+  import {
+    getCart,
+    removeFromCart,
+    cartCount,
+    formatARS,
+    priceForQuantity,
+  } from '../scripts/cart.js';
+
+  const DEFAULT_UNIT = 5000;
+  const DEFAULT_TIERS = [
+    { quantity: 3, price: 10000 },
+    { quantity: 5, price: 15000 },
+    { quantity: 10, price: 25000 },
+  ];
+
+  const drawer = document.querySelector('[data-cart-drawer]');
+  const backdrop = document.querySelector('[data-cart-backdrop]');
+  const body = document.querySelector('[data-cart-body]');
+  const totalEl = document.querySelector('[data-cart-total]');
+  const tierEl = document.querySelector('[data-cart-tier]');
+  const countEls = () => document.querySelectorAll('[data-cart-count]');
+
+  function openCart() {
+    drawer?.classList.add('is-open');
+    backdrop?.classList.add('is-open');
+    drawer?.setAttribute('aria-hidden', 'false');
+    render();
+  }
+
+  function closeCart() {
+    drawer?.classList.remove('is-open');
+    backdrop?.classList.remove('is-open');
+    drawer?.setAttribute('aria-hidden', 'true');
+  }
+
+  function unitAndTiers() {
+    const cfg = window.__SOLEPH_PRICE__;
+    return {
+      unit: cfg?.unitPrice ?? DEFAULT_UNIT,
+      tiers: cfg?.tiers ?? DEFAULT_TIERS,
+    };
+  }
+
+  function render() {
+    const items = getCart();
+    const { unit, tiers } = unitAndTiers();
+    const total = priceForQuantity(items.length, unit, tiers);
+
+    countEls().forEach((el) => {
+      el.textContent = items.length ? String(items.length) : '';
+      el.setAttribute('data-count', String(items.length));
+    });
+
+    if (totalEl) totalEl.textContent = formatARS(total);
+
+    if (tierEl) {
+      if (!items.length) tierEl.textContent = '';
+      else {
+        const next = [...tiers].sort((a, b) => a.quantity - b.quantity).find((t) => items.length < t.quantity);
+        if (next) {
+          const left = next.quantity - items.length;
+          tierEl.textContent = `Sumá ${left} más y el pack sale ${formatARS(next.price)}.`;
+        } else {
+          tierEl.textContent = 'Precio de pack aplicado.';
+        }
+      }
+    }
+
+    if (!body) return;
+    if (!items.length) {
+      body.innerHTML = '<div class="cart-empty">Todavía no hay fotos.</div>';
+      return;
+    }
+
+    body.innerHTML = items
+      .map(
+        (item) => `
+      <div class="cart-item" data-id="${item.id}">
+        <img src="${item.thumb || item.src}" alt="" width="72" height="72" loading="lazy" />
+        <div class="info">
+          <strong>${item.albumName || 'Foto'}</strong>
+          <span>${item.id}</span>
+        </div>
+        <button type="button" class="remove" data-remove="${item.id}">Quitar</button>
+      </div>`
+      )
+      .join('');
+
+    body.querySelectorAll('[data-remove]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-remove');
+        if (id) removeFromCart(id);
+      });
+    });
+  }
+
+  document.querySelectorAll('[data-open-cart]').forEach((btn) => btn.addEventListener('click', openCart));
+  document.querySelectorAll('[data-close-cart]').forEach((btn) => btn.addEventListener('click', closeCart));
+  backdrop?.addEventListener('click', closeCart);
+  window.addEventListener('soleph:cart', render);
+  window.addEventListener('soleph:open-cart', openCart);
+  render();
+
+  // expose for other scripts
+  window.__solephOpenCart = openCart;
+</script>
