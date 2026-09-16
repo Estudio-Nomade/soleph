@@ -70,14 +70,12 @@ function isActive(href: string) {
 
   toggle?.addEventListener('click', () => {
     const open = mobile?.classList.toggle('is-open');
-    if (mobile) mobile.hidden = !open;
     toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
 
   mobile?.querySelectorAll('a').forEach((a) => {
     a.addEventListener('click', () => {
       mobile.classList.remove('is-open');
-      mobile.hidden = true;
       toggle?.setAttribute('aria-expanded', 'false');
     });
   });
