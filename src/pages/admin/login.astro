@@ -10,8 +10,11 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     <p class="admin-msg admin-msg--error" data-error hidden></p>
     <p class="admin-msg admin-msg--info" data-setup hidden>
       Falta configurar Supabase en <code>.env</code> (<code>PUBLIC_SUPABASE_URL</code> y
-      <code>PUBLIC_SUPABASE_ANON_KEY</code>).
+      <code>PUBLIC_SUPABASE_ANON_KEY</code>) y <strong>reiniciar</strong>
+      <code>npm run dev</code>. Proyecto Soleph:
+      <code>nejhpiuopdxnooynbgua.supabase.co</code>.
     </p>
+    <p class="admin-msg admin-msg--info" data-env-ok hidden></p>
 
     <form class="admin-form" data-form>
       <label>
@@ -28,13 +31,14 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 </AdminLayout>
 
 <script>
-  import { getSupabase, isSupabaseConfigured } from '../../lib/supabase.js';
+  import { getSupabase, isSupabaseConfigured, supabaseHost } from '../../lib/supabase.js';
   import { getAdminSession } from '../../lib/admin-auth.js';
 
   const root = document.querySelector('[data-admin-login]');
   const form = root?.querySelector('[data-form]');
   const errEl = root?.querySelector('[data-error]');
   const setupEl = root?.querySelector('[data-setup]');
+  const envOkEl = root?.querySelector('[data-env-ok]');
   const submitBtn = root?.querySelector('[data-submit]');
 
   const params = new URLSearchParams(window.location.search);
@@ -49,10 +53,17 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
   if (bootError) showError(bootError);
 
-  if (!isSupabaseConfigured()) {
+  const configured = isSupabaseConfigured();
+  const host = supabaseHost();
+
+  if (!configured) {
     setupEl && (setupEl.hidden = false);
     form && (form.hidden = true);
   } else {
+    if (envOkEl) {
+      envOkEl.hidden = false;
+      envOkEl.textContent = host ? `Conectado a ${host}` : 'Supabase OK';
+    }
     getAdminSession()
       .then((r) => {
         if (r.session && r.profile?.role === 'admin') {
@@ -66,7 +77,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     e.preventDefault();
     showError('');
     if (!isSupabaseConfigured()) {
-      showError('Supabase no está configurado.');
+      showError('Supabase no está configurado. Revisá .env y reiniciá npm run dev.');
       return;
     }
     const fd = new FormData(form);
