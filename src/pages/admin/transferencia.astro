@@ -1,0 +1,154 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Transferencia">
+  <div data-admin-transfer>
+    <div class="admin-head">
+      <div>
+        <h1>Datos de transferencia</h1>
+        <p>Alias / CBU que ve el comprador en el carrito y en el mensaje de WhatsApp.</p>
+      </div>
+      <div class="admin-actions">
+        <a class="admin-btn admin-btn--ghost" href="/admin">Volver</a>
+      </div>
+    </div>
+
+    <p class="admin-msg admin-msg--error" data-error hidden></p>
+    <p class="admin-msg admin-msg--ok" data-ok hidden></p>
+    <p class="admin-msg admin-msg--info" data-loading>Cargando…</p>
+
+    <div class="admin-card" data-ready hidden>
+      <form class="admin-form" data-form>
+        <label>
+          Titular
+          <input name="owner" required maxlength="120" placeholder="Sole Yaquinta" autocomplete="name" />
+        </label>
+        <label>
+          Alias
+          <input name="alias" maxlength="80" placeholder="sole.yaquinta" autocomplete="off" />
+          <span class="admin-inline-note">Es lo principal que copia el cliente en el home banking.</span>
+        </label>
+        <label>
+          CBU / CVU (opcional)
+          <input name="cbu" maxlength="30" inputmode="numeric" placeholder="00000031000…" autocomplete="off" />
+        </label>
+        <label>
+          Banco / nota (opcional)
+          <input name="bank" maxlength="120" placeholder="Mercado Pago · Brubank · etc." autocomplete="off" />
+        </label>
+        <button class="admin-btn" type="submit" data-save>Guardar y publicar en la web</button>
+      </form>
+      <p class="admin-inline-note" style="margin-top:0.9rem">
+        Se guarda en Supabase <code>settings.storefront.transfer</code>. El carrito lo lee al instante (sin redeploy).
+      </p>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  import { requireAdminOrRedirect } from '../../lib/admin-auth.js';
+  import { getSupabase } from '../../lib/supabase.js';
+
+  const root = document.querySelector('[data-admin-transfer]');
+  const errEl = root?.querySelector('[data-error]');
+  const okEl = root?.querySelector('[data-ok]');
+  const loadingEl = root?.querySelector('[data-loading]');
+  const readyEl = root?.querySelector('[data-ready]');
+  const form = root?.querySelector('[data-form]');
+
+  const DEFAULT_TRANSFER = {
+    owner: 'Sole Yaquinta',
+    alias: null,
+    cbu: null,
+    bank: null,
+  };
+
+  function showError(msg) {
+    if (!errEl) return;
+    errEl.hidden = !msg;
+    errEl.textContent = msg || '';
+    if (msg) window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function showOk(msg) {
+    if (!okEl) return;
+    okEl.hidden = !msg;
+    okEl.textContent = msg || '';
+  }
+
+  function fill(transfer) {
+    if (!form) return;
+    form.owner.value = transfer.owner || DEFAULT_TRANSFER.owner;
+    form.alias.value = transfer.alias || '';
+    form.cbu.value = transfer.cbu || '';
+    form.bank.value = transfer.bank || '';
+  }
+
+  async function load() {
+    const gate = await requireAdminOrRedirect();
+    if (!gate) return;
+
+    try {
+      const sb = getSupabase();
+      const { data, error } = await sb.from('settings').select('key, value').eq('key', 'storefront').maybeSingle();
+      if (error) throw error;
+
+      const value = data?.value && typeof data.value === 'object' ? data.value : {};
+      const transfer = {
+        ...DEFAULT_TRANSFER,
+        ...(value.transfer && typeof value.transfer === 'object' ? value.transfer : {}),
+      };
+      fill(transfer);
+      form && (form._storefront = value);
+      loadingEl && (loadingEl.hidden = true);
+      readyEl && (readyEl.hidden = false);
+    } catch (err) {
+      loadingEl && (loadingEl.hidden = true);
+      showError(err?.message || 'No se pudieron cargar los datos de transferencia');
+    }
+  }
+
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    showError('');
+    showOk('');
+    const fd = new FormData(form);
+    const owner = String(fd.get('owner') || '').trim() || DEFAULT_TRANSFER.owner;
+    const alias = String(fd.get('alias') || '').trim() || null;
+    const cbuRaw = String(fd.get('cbu') || '').replace(/\s+/g, '');
+    const cbu = cbuRaw || null;
+    const bank = String(fd.get('bank') || '').trim() || null;
+
+    if (cbu && !/^\d{16,22}$/.test(cbu)) {
+      showError('CBU/CVU: solo números, 16 a 22 dígitos');
+      return;
+    }
+
+    const prev = form._storefront && typeof form._storefront === 'object' ? form._storefront : {};
+    const value = {
+      ...prev,
+      currency: prev.currency || 'ARS',
+      transfer: { owner, alias, cbu, bank },
+    };
+
+    try {
+      const sb = getSupabase();
+      const { error } = await sb.from('settings').upsert(
+        {
+          key: 'storefront',
+          value,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'key' },
+      );
+      if (error) throw error;
+      form._storefront = value;
+      showOk(alias ? `Listo. En la web se ve el alias “${alias}”.` : 'Guardado. Sin alias: el carrito avisa que lo confirmás por WhatsApp.');
+    } catch (err) {
+      showError(err?.message || 'No se pudo guardar');
+    }
+  });
+
+  load();
+</script>

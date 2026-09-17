@@ -122,11 +122,11 @@ Deno.serve(async (req) => {
       .map(([id]) => id);
 
     // hydrate previews
-    let photos: { id: string; preview_path: string; sort_order: number }[] = [];
+    let photos: { id: string; preview_path: string; sort_order: number; code: string | null }[] = [];
     if (photoIds.length) {
       const { data: ph } = await admin
         .from('photos')
-        .select('id, preview_path, sort_order')
+        .select('id, preview_path, sort_order, code')
         .eq('album_id', albumId)
         .in('id', photoIds);
       photos = ph || [];
@@ -139,6 +139,7 @@ Deno.serve(async (req) => {
         if (!p) return null;
         return {
           photoId: id,
+          code: p.code || id.replace(/-/g, '').slice(0, 8).toUpperCase(),
           similarity: scored.get(id),
           previewPath: p.preview_path,
           sortOrder: p.sort_order,

@@ -33,6 +33,8 @@ create table if not exists public.photos (
   id uuid primary key default gen_random_uuid(),
   album_id uuid not null references public.albums (id) on delete cascade,
   sort_order integer not null default 0,
+  -- short public code for WhatsApp orders / delivery (#A3F9C21B)
+  code text,
   -- public/watermarked preview (safe to show in storefront)
   preview_path text not null,
   -- private original / hi-res for delivery after payment
@@ -40,12 +42,13 @@ create table if not exists public.photos (
   width integer,
   height integer,
   taken_at timestamptz,
-  -- face index (AWS Rekognition) — phase 2
+  -- face index (AWS Rekognition)
   rekognition_face_ids text[] not null default '{}',
   created_at timestamptz not null default now()
 );
 
 create index if not exists photos_album_id_idx on public.photos (album_id, sort_order);
+create unique index if not exists photos_code_uidx on public.photos (code);
 
 create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),

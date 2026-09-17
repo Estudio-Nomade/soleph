@@ -181,6 +181,7 @@ const onlyEvents = eventAlbums.length > 0;
       btn.className = 'photo-tile';
       btn.dataset.photo = '';
       btn.dataset.id = m.photoId;
+      btn.dataset.code = m.code || String(m.photoId || '').replace(/-/g, '').slice(0, 8).toUpperCase();
       btn.dataset.src = src;
       btn.dataset.thumb = src;
       btn.dataset.albumId = albumMeta?.id || select.value;
@@ -197,6 +198,7 @@ const onlyEvents = eventAlbums.length > 0;
         else {
           addToCart({
             id,
+            code: m.code || btn.dataset.code,
             src,
             thumb: src,
             albumId: albumMeta?.id || select.value,

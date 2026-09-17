@@ -391,6 +391,62 @@
   cursor: pointer;
 }
 
+.admin-photo-code {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  z-index: 1;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(1, 43, 85, 0.88);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-photo-meta {
+  position: absolute;
+  left: 0.35rem;
+  right: 0.35rem;
+  bottom: 2.55rem;
+  z-index: 1;
+}
+
+.admin-photo-meta select {
+  width: 100%;
+  min-height: 32px;
+  padding: 0.2rem 0.35rem;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--navy);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.admin-cat-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.admin-cat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid #d7dee6;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.admin-cat-row span {
+  font-weight: 600;
+  color: var(--navy);
+}
+
 .admin-photo.is-cover {
   outline: 2px solid var(--navy);
   outline-offset: 1px;

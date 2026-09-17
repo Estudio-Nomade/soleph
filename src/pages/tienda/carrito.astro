@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import site from '../../data/site.json';
+import { loadTransferSettings } from '../../lib/settings.js';
 
 const sample = site.shop.albums[0];
 const unit = sample?.photo_price ?? 5000;
@@ -13,7 +14,7 @@ const formats = site.shop.formats || {
   ],
 };
 const wa = site.brand.whatsapp_digits || '5492494550855';
-const transfer = site.shop.transfer || { owner: 'Sole Yaquinta', alias: null, cbu: null };
+const transfer = await loadTransferSettings(site.shop.transfer || { owner: 'Sole Yaquinta', alias: null, cbu: null });
 ---
 
 <BaseLayout title="Carrito" description="Transferí y mandá el pedido a Sole por WhatsApp">
@@ -41,8 +42,24 @@ const transfer = site.shop.transfer || { owner: 'Sole Yaquinta', alias: null, cb
 
         <div class="transfer-box is-on" data-transfer-box>
           <div><strong>Titular:</strong> {transfer.owner || 'Sole Yaquinta'}</div>
-          <div><strong>Alias:</strong> {transfer.alias || 'Sole te lo confirma por WhatsApp si hace falta'}</div>
-          {transfer.cbu && <div><strong>CBU/CVU:</strong> {transfer.cbu}</div>}
+          <div data-transfer-alias>
+            <strong>Alias:</strong>
+            {
+              transfer.alias ? (
+                <span class="transfer-value">{transfer.alias}</span>
+              ) : (
+                <span>Sole te lo confirma por WhatsApp si hace falta</span>
+              )
+            }
+          </div>
+          {
+            transfer.cbu && (
+              <div>
+                <strong>CBU/CVU:</strong> <span class="transfer-value">{transfer.cbu}</span>
+              </div>
+            )
+          }
+          {transfer.bank && <div class="field-hint" style="margin-top:0.35rem;">{transfer.bank}</div>}
           <p class="field-hint" style="margin-top:0.65rem;">
             1) Transferí el total · 2) Abrí WhatsApp con el pedido · 3) Adjuntá el comprobante en ese chat.
           </p>
@@ -102,6 +119,7 @@ const transfer = site.shop.transfer || { owner: 'Sole Yaquinta', alias: null, cb
     priceForQuantity,
     DEFAULT_FORMAT,
   } from '../../scripts/cart.js';
+  import { isSupabaseConfigured, getSupabase } from '../../lib/supabase.js';
 
   const list = document.querySelector('[data-cart-page-list]');
   const totalEl = document.querySelector('[data-page-total]');
@@ -109,6 +127,7 @@ const transfer = site.shop.transfer || { owner: 'Sole Yaquinta', alias: null, cb
   const form = document.querySelector('[data-checkout-form]');
   const ok = document.querySelector('[data-checkout-success]');
   const paidCheck = document.querySelector('[data-paid]');
+  const transferBox = document.querySelector('[data-transfer-box]');
   const price = window.__SOLEPH_PRICE__ || { unitPrice: 5000, tiers: [] };
   const formats = window.__SOLEPH_FORMATS__ || {
     default: DEFAULT_FORMAT,
@@ -118,7 +137,52 @@ const transfer = site.shop.transfer || { owner: 'Sole Yaquinta', alias: null, cb
     ],
   };
   const wa = window.__SOLEPH_WA__ || form?.getAttribute('data-wa') || '5492494550855';
-  const transfer = window.__SOLEPH_TRANSFER__ || {};
+  let transfer = window.__SOLEPH_TRANSFER__ || {};
+
+  function escapeHtml(s) {
+    return String(s)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
+  }
+
+  function paintTransfer(t) {
+    if (!transferBox || !t) return;
+    const aliasHtml = t.alias
+      ? `<span class="transfer-value">${escapeHtml(t.alias)}</span>`
+      : '<span>Sole te lo confirma por WhatsApp si hace falta</span>';
+    transferBox.innerHTML = `
+      <div><strong>Titular:</strong> ${escapeHtml(t.owner || 'Sole Yaquinta')}</div>
+      <div data-transfer-alias><strong>Alias:</strong> ${aliasHtml}</div>
+      ${t.cbu ? `<div><strong>CBU/CVU:</strong> <span class="transfer-value">${escapeHtml(t.cbu)}</span></div>` : ''}
+      ${t.bank ? `<div class="field-hint" style="margin-top:0.35rem;">${escapeHtml(t.bank)}</div>` : ''}
+      <p class="field-hint" style="margin-top:0.65rem;">
+        1) Transferí el total · 2) Abrí WhatsApp con el pedido · 3) Adjuntá el comprobante en ese chat.
+      </p>
+    `;
+  }
+
+  async function refreshTransferFromDb() {
+    if (!isSupabaseConfigured()) return;
+    try {
+      const sb = getSupabase();
+      const { data, error } = await sb.from('settings').select('value').eq('key', 'storefront').maybeSingle();
+      if (error) throw error;
+      const t = data?.value?.transfer;
+      if (!t || typeof t !== 'object') return;
+      transfer = {
+        owner: t.owner || transfer.owner || 'Sole Yaquinta',
+        alias: t.alias ?? null,
+        cbu: t.cbu ?? null,
+        bank: t.bank ?? null,
+      };
+      window.__SOLEPH_TRANSFER__ = transfer;
+      paintTransfer(transfer);
+    } catch (err) {
+      console.warn('transfer refresh', err);
+    }
+  }
 
   function formatSelect(item) {
     const current = item.format || formats.default || DEFAULT_FORMAT;
@@ -140,8 +204,8 @@ const transfer = site.shop.transfer || { owner: 'Sole Yaquinta', alias: null, cb
     if (totalEl) totalEl.textContent = formatARS(total);
 
     if (tierEl) {
-      const tiers = price.tiers || [];
-      const next = [...tiers].sort((a, b) => a.quantity - b.quantity).find((t) => items.length < t.quantity);
+      const tiersList = price.tiers || [];
+      const next = [...tiersList].sort((a, b) => a.quantity - b.quantity).find((t) => items.length < t.quantity);
       tierEl.textContent = next
         ? `Con ${next.quantity} fotos el pack queda en ${formatARS(next.price)}.`
         : items.length
@@ -165,7 +229,7 @@ const transfer = site.shop.transfer || { owner: 'Sole Yaquinta', alias: null, cb
         <img src="${item.thumb || item.src}" alt="" width="72" height="72" />
         <div class="info">
           <strong>${item.albumName || 'Foto'}</strong>
-          <span>${item.id}</span>
+          <span class="photo-code">#${item.code || item.id}</span>
           ${formatSelect(item)}
           <span class="format-current">${formatLabel(item.format)}</span>
         </div>
@@ -234,7 +298,8 @@ const transfer = site.shop.transfer || { owner: 'Sole Yaquinta', alias: null, cb
       `Fotos:`,
       ...items.map((item, i) => {
         const fmt = formatLabel(item.format || DEFAULT_FORMAT);
-        return `${i + 1}. ${item.albumName || 'Álbum'} — ${item.id} — ${fmt}`;
+        const code = item.code || String(item.id || '').replace(/-/g, '').slice(0, 8).toUpperCase();
+        return `${i + 1}. ${item.albumName || 'Álbum'} — #${code} — ${fmt}`;
       }),
       ``,
       `Te adjunto el comprobante en este chat.`,
@@ -266,4 +331,5 @@ const transfer = site.shop.transfer || { owner: 'Sole Yaquinta', alias: null, cb
 
   window.addEventListener('soleph:cart', render);
   render();
+  refreshTransferFromDb();
 </script>

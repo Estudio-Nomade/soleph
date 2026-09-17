@@ -67,30 +67,64 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       </div>
 
       <div class="admin-card">
-        <h2 class="admin-section-title">Packs (tiers)</h2>
+        <h2 class="admin-section-title">Precios y packs</h2>
         <p class="admin-muted" style="margin-top:0">
-          Ej: 3 fotos a $10.000. Si no hay packs, vale el precio unitario.
+          Unitario = 1 foto. Packs: precio total del combo (no por unidad).
+          Defaults típicos: 1 / 3 / 5 / 10.
         </p>
         <div class="admin-tiers" data-tiers></div>
         <div class="admin-actions" style="margin-top:0.75rem">
+          <button type="button" class="admin-btn admin-btn--ghost" data-reset-tiers>
+            Cargar 1 · 3 · 5 · 10
+          </button>
           <button type="button" class="admin-btn admin-btn--ghost" data-add-tier>Agregar pack</button>
           <button type="button" class="admin-btn" data-save-tiers>Guardar packs</button>
         </div>
       </div>
 
       <div class="admin-card">
+        <h2 class="admin-section-title">Categorías</h2>
+        <p class="admin-muted" style="margin-top:0">
+          Ej: Mansos, Potros, Damas. Se usan para filtrar en “Buscar mis fotos” y al etiquetar en la subida.
+        </p>
+        <div class="admin-cat-list" data-cat-list></div>
+        <div class="admin-actions" style="margin-top:0.75rem; align-items:end">
+          <label style="flex:1; min-width:12rem">
+            Nueva categoría
+            <input type="text" data-cat-name maxlength="40" placeholder="Ej. Mansos" />
+          </label>
+          <button type="button" class="admin-btn" data-cat-add>Agregar</button>
+          <button type="button" class="admin-btn admin-btn--ghost" data-cat-seed>Mansos · Potros · Damas</button>
+        </div>
+      </div>
+
+      <div class="admin-card">
         <h2 class="admin-section-title">Fotos</h2>
         <p class="admin-muted" style="margin-top:0">
-          Se sube el original (privado) y un preview con marca de agua (público). Si “buscar por cara” está on,
-          indexamos caras al subir (sin AWS; embeddings locales).
+          Subí archivos o <strong>una carpeta entera</strong> (DCIM de la tarjeta).
+          El <strong>código</strong> sale del número de cámara del archivo (DSC_1234 → #1234).
+          Si “buscar por cara” está on, indexamos con Rekognition al subir.
         </p>
 
+        <label class="admin-check" style="margin-bottom:0.75rem">
+          Categoría al subir (opcional)
+          <select data-upload-category>
+            <option value="">Sin categoría</option>
+          </select>
+        </label>
+
         <div class="admin-drop" data-drop>
-          <p style="margin:0 0 0.75rem">Arrastrá fotos acá o elegí archivos</p>
-          <label class="admin-btn admin-btn--ghost" style="cursor:pointer">
-            Elegir fotos
-            <input type="file" accept="image/*" multiple data-file-input />
-          </label>
+          <p style="margin:0 0 0.75rem">Arrastrá fotos/carpeta acá o elegí</p>
+          <div class="admin-actions" style="justify-content:center">
+            <label class="admin-btn admin-btn--ghost" style="cursor:pointer">
+              Elegir fotos
+              <input type="file" accept="image/*" multiple data-file-input />
+            </label>
+            <label class="admin-btn admin-btn--ghost" style="cursor:pointer">
+              Elegir carpeta
+              <input type="file" accept="image/*" multiple webkitdirectory directory data-folder-input />
+            </label>
+          </div>
           <p class="admin-progress" data-upload-status hidden></p>
         </div>
         <div class="admin-actions" style="margin-top:0.75rem">
@@ -116,6 +150,11 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   import { getSupabase, publicStorageUrl, BUCKETS } from '../../../lib/supabase.js';
   import { makeWatermarkedPreview, safeFileBase } from '../../../lib/watermark.js';
   import { indexPhotoFaces } from '../../../lib/face.js';
+  import {
+    cameraCodeFromFilename,
+    slugifyCategory,
+    DEFAULT_CATEGORY_NAMES,
+  } from '../../../lib/photo-meta.js';
 
   const root = document.querySelector('[data-admin-edit]');
   const albumId = new URLSearchParams(window.location.search).get('id');
@@ -131,14 +170,162 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   const photosEmpty = root?.querySelector('[data-photos-empty]');
   const drop = root?.querySelector('[data-drop]');
   const fileInput = root?.querySelector('[data-file-input]');
+  const folderInput = root?.querySelector('[data-folder-input]');
   const uploadStatus = root?.querySelector('[data-upload-status]');
   const togglePublishBtn = root?.querySelector('[data-toggle-publish]');
+  const catListEl = root?.querySelector('[data-cat-list]');
+  const catNameInput = root?.querySelector('[data-cat-name]');
+  const uploadCatSelect = root?.querySelector('[data-upload-category]');
 
   /** @type {any} */
   let album = null;
   /** @type {any[]} */
   let photos = [];
+  /** @type {any[]} */
+  let categories = [];
+  /** @type {Record<string, string[]>} photoId -> categoryIds */
+  let photoCatMap = {};
 
+  function renderCategories() {
+    if (catListEl) {
+      if (!categories.length) {
+        catListEl.innerHTML = '<p class="admin-muted">Todavía no hay categorías.</p>';
+      } else {
+        catListEl.innerHTML = categories
+          .map(
+            (c) => `<div class="admin-cat-row">
+              <span>${escapeHtml(c.name)}</span>
+              <button type="button" class="admin-btn admin-btn--ghost" data-cat-del="${c.id}">Quitar</button>
+            </div>`,
+          )
+          .join('');
+        catListEl.querySelectorAll('[data-cat-del]').forEach((btn) => {
+          btn.addEventListener('click', () => deleteCategory(btn.getAttribute('data-cat-del')));
+        });
+      }
+    }
+    if (uploadCatSelect) {
+      const cur = uploadCatSelect.value;
+      uploadCatSelect.innerHTML =
+        '<option value="">Sin categoría</option>' +
+        categories.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+      if (cur) uploadCatSelect.value = cur;
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
+  }
+
+  async function loadCategories() {
+    const sb = getSupabase();
+    const { data, error } = await sb
+      .from('categories')
+      .select('*')
+      .eq('album_id', albumId)
+      .order('sort_order', { ascending: true });
+    if (error) {
+      // table may not exist yet on this project
+      console.warn('categories', error.message);
+      categories = [];
+    } else {
+      categories = data || [];
+    }
+    renderCategories();
+  }
+
+  async function loadPhotoCategories() {
+    photoCatMap = {};
+    if (!photos.length) return;
+    const sb = getSupabase();
+    const ids = photos.map((p) => p.id);
+    const { data, error } = await sb.from('photo_categories').select('photo_id, category_id').in('photo_id', ids);
+    if (error) {
+      console.warn('photo_categories', error.message);
+      return;
+    }
+    for (const row of data || []) {
+      if (!photoCatMap[row.photo_id]) photoCatMap[row.photo_id] = [];
+      photoCatMap[row.photo_id].push(row.category_id);
+    }
+  }
+
+  async function addCategory(name) {
+    const n = String(name || '').trim();
+    if (!n) return;
+    showError('');
+    try {
+      const sb = getSupabase();
+      const { data, error } = await sb
+        .from('categories')
+        .insert({
+          album_id: albumId,
+          name: n,
+          slug: slugifyCategory(n),
+          sort_order: categories.length,
+        })
+        .select('*')
+        .single();
+      if (error) throw error;
+      categories.push(data);
+      renderCategories();
+      if (catNameInput) catNameInput.value = '';
+      showOk(`Categoría “${n}” agregada`);
+    } catch (err) {
+      showError(err?.message || 'No se pudo agregar la categoría (¿corriste categories.sql?)');
+    }
+  }
+
+  async function deleteCategory(id) {
+    if (!id || !confirm('¿Borrar esta categoría?')) return;
+    try {
+      const sb = getSupabase();
+      const { error } = await sb.from('categories').delete().eq('id', id);
+      if (error) throw error;
+      categories = categories.filter((c) => c.id !== id);
+      renderCategories();
+      showOk('Categoría borrada');
+    } catch (err) {
+      showError(err?.message || 'No se pudo borrar');
+    }
+  }
+
+  async function seedDefaultCategories() {
+    for (const name of DEFAULT_CATEGORY_NAMES) {
+      if (categories.some((c) => c.name.toLowerCase() === name.toLowerCase())) continue;
+      await addCategory(name);
+    }
+  }
+
+  async function setPhotoCategory(photoId, categoryId) {
+    const sb = getSupabase();
+    // replace all cats for photo with single selection (simple UX)
+    await sb.from('photo_categories').delete().eq('photo_id', photoId);
+    if (categoryId) {
+      const { error } = await sb.from('photo_categories').insert({ photo_id: photoId, category_id: categoryId });
+      if (error) throw error;
+      photoCatMap[photoId] = [categoryId];
+    } else {
+      photoCatMap[photoId] = [];
+    }
+  }
+
+  function uniqueCameraCode(desired, used) {
+    let code = (desired || '').toUpperCase() || 'FOTO';
+    if (!used.has(code)) {
+      used.add(code);
+      return code;
+    }
+    let i = 2;
+    while (used.has(`${code}-${i}`) && i < 9999) i += 1;
+    const next = `${code}-${i}`;
+    used.add(next);
+    return next;
+  }
   function showError(msg) {
     if (!errEl) return;
     errEl.hidden = !msg;
@@ -151,14 +338,24 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     okEl.textContent = msg || '';
   }
 
+  function defaultTiers(unit = 5000) {
+    const u = Math.max(0, Number(unit) || 5000);
+    return [
+      { quantity: 1, price: u },
+      { quantity: 3, price: u * 2 },
+      { quantity: 5, price: u * 3 },
+      { quantity: 10, price: u * 5 },
+    ];
+  }
+
   function tierRow(qty = 3, price = 10000) {
     const row = document.createElement('div');
     row.className = 'admin-tier-row';
     row.innerHTML = `
       <label>Cantidad
-        <input type="number" min="2" step="1" name="qty" value="${qty}" />
+        <input type="number" min="1" step="1" name="qty" value="${qty}" />
       </label>
-      <label>Precio pack (ARS)
+      <label>Precio total pack (ARS)
         <input type="number" min="0" step="100" name="price" value="${price}" />
       </label>
       <button type="button" class="admin-btn admin-btn--ghost" data-remove-tier>Quitar</button>
@@ -175,8 +372,15 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         const price = Number(row.querySelector('[name="price"]')?.value || 0);
         return { quantity, price };
       })
-      .filter((t) => t.quantity >= 2 && t.price >= 0)
+      .filter((t) => t.quantity >= 1 && t.price >= 0)
       .sort((a, b) => a.quantity - b.quantity);
+  }
+
+  function renderTier(list) {
+    if (!tiersEl) return;
+    tiersEl.innerHTML = '';
+    const tiers = Array.isArray(list) && list.length ? list : defaultTiers(album?.photo_price_ars);
+    tiers.forEach((t) => tiersEl.appendChild(tierRow(t.quantity, t.price)));
   }
 
   function fillForm() {
@@ -200,10 +404,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       togglePublishBtn.textContent = album.published ? 'Despublicar' : 'Publicar';
     }
     if (tiersEl) {
-      tiersEl.innerHTML = '';
-      const tiers = Array.isArray(album.price_tiers) ? album.price_tiers : [];
-      if (!tiers.length) tiersEl.appendChild(tierRow(3, Math.max((album.photo_price_ars || 5000) * 2, 10000)));
-      else tiers.forEach((t) => tiersEl.appendChild(tierRow(t.quantity, t.price)));
+      renderTier(Array.isArray(album.price_tiers) ? album.price_tiers : []);
     }
   }
 
@@ -219,10 +420,21 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     for (const p of photos) {
       const url = publicStorageUrl(BUCKETS.previews, p.preview_path);
       const isCover = cover && (cover === p.preview_path || cover.endsWith(p.preview_path));
+      const code = p.code || cameraCodeFromFilename(p.source_filename || '') || (p.id || '').replace(/-/g, '').slice(0, 8).toUpperCase();
+      const currentCat = (photoCatMap[p.id] || [])[0] || '';
+      const catOpts =
+        '<option value="">Sin cat.</option>' +
+        categories
+          .map((c) => `<option value="${c.id}" ${c.id === currentCat ? 'selected' : ''}>${escapeHtml(c.name)}</option>`)
+          .join('');
       const el = document.createElement('div');
       el.className = 'admin-photo' + (isCover ? ' is-cover' : '');
       el.innerHTML = `
         <img src="${url}" alt="" loading="lazy" />
+        <span class="admin-photo-code" title="Número de cámara / código pedido">#${escapeHtml(code)}</span>
+        <div class="admin-photo-meta">
+          <select data-photo-cat="${p.id}" aria-label="Categoría">${catOpts}</select>
+        </div>
         <div class="admin-photo-actions">
           <button type="button" data-cover>Cover</button>
           <button type="button" data-del>Borrar</button>
@@ -230,6 +442,14 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       `;
       el.querySelector('[data-cover]')?.addEventListener('click', () => setCover(p));
       el.querySelector('[data-del]')?.addEventListener('click', () => deletePhoto(p));
+      el.querySelector('[data-photo-cat]')?.addEventListener('change', async (e) => {
+        try {
+          await setPhotoCategory(p.id, e.target.value || '');
+          showOk('Categoría actualizada');
+        } catch (err) {
+          showError(err?.message || 'No se pudo guardar categoría');
+        }
+      });
       photosEl.appendChild(el);
     }
   }
@@ -277,7 +497,9 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   }
 
   async function uploadFiles(fileList) {
-    const files = [...fileList].filter((f) => f.type.startsWith('image/'));
+    const files = [...fileList]
+      .filter((f) => f.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif|cr2|nef|arw)$/i.test(f.name))
+      .sort((a, b) => String(a.webkitRelativePath || a.name).localeCompare(String(b.webkitRelativePath || b.name)));
     if (!files.length) return;
     showError('');
     showOk('');
@@ -285,12 +507,16 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     const sb = getSupabase();
     let done = 0;
     const startOrder = photos.reduce((m, p) => Math.max(m, p.sort_order || 0), 0);
+    const usedCodes = new Set(photos.map((p) => String(p.code || '').toUpperCase()).filter(Boolean));
+    const uploadCatId = uploadCatSelect?.value || '';
 
     for (const file of files) {
       try {
-        uploadStatus && (uploadStatus.textContent = `Procesando ${done + 1}/${files.length}: ${file.name}`);
+        const label = file.webkitRelativePath || file.name;
+        uploadStatus && (uploadStatus.textContent = `Procesando ${done + 1}/${files.length}: ${label}`);
         const { previewBlob, width, height } = await makeWatermarkedPreview(file);
-        const base = `${albumId}/${Date.now().toString(36)}-${safeFileBase(file.name)}`;
+        const camCode = uniqueCameraCode(cameraCodeFromFilename(file.name), usedCodes);
+        const base = `${albumId}/${camCode}-${Date.now().toString(36)}-${safeFileBase(file.name)}`;
         const previewPath = `${base}-wm.jpg`;
         const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
         const originalPath = `${base}-full.${ext}`;
@@ -308,27 +534,40 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         if (upOrig.error) throw upOrig.error;
 
         const sort_order = startOrder + done + 1;
-        const { data: row, error } = await sb
-          .from('photos')
-          .insert({
-            album_id: albumId,
-            preview_path: previewPath,
-            original_path: originalPath,
-            width,
-            height,
-            sort_order,
-          })
-          .select('*')
-          .single();
+        const insertPayload = {
+          album_id: albumId,
+          preview_path: previewPath,
+          original_path: originalPath,
+          width,
+          height,
+          sort_order,
+          code: camCode,
+          source_filename: file.name,
+        };
+        let { data: row, error } = await sb.from('photos').insert(insertPayload).select('*').single();
+        // older schema without source_filename / code columns
+        if (error && /source_filename|code/i.test(error.message || '')) {
+          delete insertPayload.source_filename;
+          if (/code/i.test(error.message || '')) delete insertPayload.code;
+          ({ data: row, error } = await sb.from('photos').insert(insertPayload).select('*').single());
+        }
         if (error) throw error;
+        if (!row.code) row.code = camCode;
         photos.push(row);
+
+        if (uploadCatId) {
+          try {
+            await setPhotoCategory(row.id, uploadCatId);
+          } catch (catErr) {
+            console.warn('cat assign', catErr);
+          }
+        }
 
         if (!album.cover_path) {
           await sb.from('albums').update({ cover_path: previewPath }).eq('id', albumId);
           album.cover_path = previewPath;
         }
 
-        // index faces from watermarked preview (same pixels the shop shows)
         if (album.search_by_face !== false) {
           try {
             uploadStatus && (uploadStatus.textContent = `Indexando caras ${done + 1}/${files.length}…`);
@@ -352,7 +591,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     photos.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     renderPhotos();
     const faced = photos.filter((p) => typeof p._faces === 'number').reduce((n, p) => n + (p._faces || 0), 0);
-    showOk(done ? `Listo: ${done} archivo(s)${faced ? ` · ${faced} cara(s) indexadas` : ''}` : '');
+    showOk(done ? `Listo: ${done} archivo(s)${faced ? ` · ${faced} cara(s)` : ''}` : '');
     setTimeout(() => {
       if (uploadStatus) uploadStatus.hidden = true;
     }, 2500);
@@ -404,6 +643,8 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         .order('sort_order', { ascending: true });
       if (pErr) throw pErr;
       photos = ph || [];
+      await loadCategories();
+      await loadPhotoCategories();
       fillForm();
       renderPhotos();
       loadingEl && (loadingEl.hidden = true);
@@ -443,7 +684,12 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   });
 
   root?.querySelector('[data-add-tier]')?.addEventListener('click', () => {
-    tiersEl?.appendChild(tierRow());
+    tiersEl?.appendChild(tierRow(3, Math.max((album?.photo_price_ars || 5000) * 2, 10000)));
+  });
+
+  root?.querySelector('[data-reset-tiers]')?.addEventListener('click', () => {
+    const unit = Number(form?.photo_price_ars?.value || album?.photo_price_ars || 5000);
+    renderTier(defaultTiers(unit));
   });
 
   root?.querySelector('[data-save-tiers]')?.addEventListener('click', async () => {
@@ -508,6 +754,26 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   fileInput?.addEventListener('change', () => {
     if (fileInput.files?.length) uploadFiles(fileInput.files);
     fileInput.value = '';
+  });
+
+  folderInput?.addEventListener('change', () => {
+    if (folderInput.files?.length) uploadFiles(folderInput.files);
+    folderInput.value = '';
+  });
+
+  root?.querySelector('[data-cat-add]')?.addEventListener('click', () => {
+    addCategory(catNameInput?.value || '');
+  });
+
+  catNameInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addCategory(catNameInput.value || '');
+    }
+  });
+
+  root?.querySelector('[data-cat-seed]')?.addEventListener('click', () => {
+    seedDefaultCategories();
   });
 
   root?.querySelector('[data-reindex-faces]')?.addEventListener('click', () => {
