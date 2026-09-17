@@ -39,9 +39,11 @@ npm run preview
 | `/admin/login` | Login Supabase |
 | `/admin` | Lista de eventos |
 | `/admin/evento` | Crear evento |
-| `/admin/evento/editar?id=` | Editar, precios, packs, upload, publish |
+| `/admin/evento/editar?id=` | Editar, precios, packs, categorías, upload, publish |
+| `/admin/transferencia` | Alias / CBU / titular (sale en el carrito) |
 
-Setup: correr `supabase/schema.sql`, crear user, `profiles.role = 'admin'`, keys en `.env`. Detalle en `docs/admin-plan.md`.
+Setup: proyecto Supabase **`xfjukxgkqgwmghteooht`** — ver `docs/supabase-project.md`.  
+Correr `schema.sql` + `categories.sql`, crear user admin, keys en `.env`.
 
 ## Datos
 
