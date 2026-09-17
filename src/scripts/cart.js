@@ -1,11 +1,16 @@
 const STORAGE_KEY = 'soleph-cart-v1';
+export const DEFAULT_FORMAT = 'redes';
 
 function readCart() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const data = JSON.parse(raw);
-    return Array.isArray(data) ? data : [];
+    if (!Array.isArray(data)) return [];
+    return data.map((item) => ({
+      ...item,
+      format: item.format === 'impresion' ? 'impresion' : DEFAULT_FORMAT,
+    }));
   } catch {
     return [];
   }
@@ -34,6 +39,7 @@ export function addToCart(item) {
     albumId: item.albumId,
     albumName: item.albumName,
     unitPrice: item.unitPrice,
+    format: item.format === 'impresion' ? 'impresion' : DEFAULT_FORMAT,
   });
   writeCart(items);
   return items;
@@ -45,12 +51,23 @@ export function removeFromCart(id) {
   return items;
 }
 
+export function setItemFormat(id, format) {
+  const next = format === 'impresion' ? 'impresion' : DEFAULT_FORMAT;
+  const items = readCart().map((item) => (item.id === id ? { ...item, format: next } : item));
+  writeCart(items);
+  return items;
+}
+
 export function clearCart() {
   writeCart([]);
 }
 
 export function isInCart(id) {
   return readCart().some((x) => x.id === id);
+}
+
+export function formatLabel(format) {
+  return format === 'impresion' ? 'Impresión' : 'Redes';
 }
 
 /** FullFoto-style tiers: base unit price, or pack total when qty hits a tier. */

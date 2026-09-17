@@ -1,0 +1,122 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Eventos">
+  <div data-admin-home>
+    <div class="admin-head">
+      <div>
+        <h1>Eventos</h1>
+        <p data-subtitle>Cargá fechas, precios y fotos para la tienda.</p>
+      </div>
+      <div class="admin-actions">
+        <a class="admin-btn" href="/admin/evento">Nuevo evento</a>
+      </div>
+    </div>
+
+    <p class="admin-msg admin-msg--error" data-error hidden></p>
+    <p class="admin-msg admin-msg--info" data-loading>Cargando…</p>
+
+    <div class="admin-card" data-list-card hidden>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Tipo</th>
+              <th>Precio</th>
+              <th>Estado</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody data-rows></tbody>
+        </table>
+      </div>
+      <div class="admin-empty" data-empty hidden>
+        Todavía no hay eventos. Creá el primero.
+      </div>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  import { requireAdminOrRedirect, formatArs } from '../../lib/admin-auth.js';
+  import { getSupabase } from '../../lib/supabase.js';
+
+  const root = document.querySelector('[data-admin-home]');
+  const errEl = root?.querySelector('[data-error]');
+  const loadingEl = root?.querySelector('[data-loading]');
+  const listCard = root?.querySelector('[data-list-card]');
+  const rowsEl = root?.querySelector('[data-rows]');
+  const emptyEl = root?.querySelector('[data-empty]');
+  const subtitle = root?.querySelector('[data-subtitle]');
+
+  function showError(msg) {
+    if (!errEl) return;
+    errEl.hidden = !msg;
+    errEl.textContent = msg || '';
+  }
+
+  async function load() {
+    const gate = await requireAdminOrRedirect();
+    if (!gate) return;
+
+    if (subtitle && gate.profile?.full_name) {
+      subtitle.textContent = `Hola ${gate.profile.full_name}. Cargá fechas, precios y fotos.`;
+    }
+
+    try {
+      const sb = getSupabase();
+      const { data, error } = await sb
+        .from('albums')
+        .select('id, slug, name, kind, date_label, published, photo_price_ars, updated_at')
+        .order('updated_at', { ascending: false });
+      if (error) throw error;
+
+      loadingEl && (loadingEl.hidden = true);
+      listCard && (listCard.hidden = false);
+
+      const albums = data || [];
+      if (!albums.length) {
+        emptyEl && (emptyEl.hidden = false);
+        if (rowsEl) rowsEl.innerHTML = '';
+        return;
+      }
+      emptyEl && (emptyEl.hidden = true);
+      if (!rowsEl) return;
+
+      rowsEl.innerHTML = albums
+        .map((a) => {
+          const kind = a.kind === 'portfolio' ? 'portfolio' : 'event';
+          const kindLabel = kind === 'portfolio' ? 'Portafolio' : 'Evento';
+          const pub = a.published
+            ? '<span class="admin-badge admin-badge--on">Publicado</span>'
+            : '<span class="admin-badge admin-badge--off">Borrador</span>';
+          return `<tr>
+            <td>
+              <strong>${escapeHtml(a.name)}</strong>
+              <div class="admin-muted">${escapeHtml(a.date_label || a.slug || '')}</div>
+            </td>
+            <td><span class="admin-badge admin-badge--${kind}">${kindLabel}</span></td>
+            <td>${formatArs(a.photo_price_ars)}</td>
+            <td>${pub}</td>
+            <td><a class="admin-btn admin-btn--ghost" href="/admin/evento/editar?id=${a.id}">Editar</a></td>
+          </tr>`;
+        })
+        .join('');
+    } catch (err) {
+      loadingEl && (loadingEl.hidden = true);
+      showError(err?.message || 'No se pudieron cargar los eventos');
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
+  }
+
+  load();
+</script>

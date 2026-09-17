@@ -40,3 +40,6 @@ playwright-report/
 # Runtime local
 node_modules/.cache/
 .pnpm-store/
+
+# Supabase CLI local link cache
+supabase/.temp/

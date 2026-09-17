@@ -24,8 +24,8 @@
   import {
     getCart,
     removeFromCart,
-    cartCount,
     formatARS,
+    formatLabel,
     priceForQuantity,
   } from '../scripts/cart.js';
 
@@ -102,7 +102,7 @@
         <img src="${item.thumb || item.src}" alt="" width="72" height="72" loading="lazy" />
         <div class="info">
           <strong>${item.albumName || 'Foto'}</strong>
-          <span>${item.id}</span>
+          <span>${item.id} · ${formatLabel(item.format)}</span>
         </div>
         <button type="button" class="remove" data-remove="${item.id}">Quitar</button>
       </div>`
@@ -124,6 +124,5 @@
   window.addEventListener('soleph:open-cart', openCart);
   render();
 
-  // expose for other scripts
   window.__solephOpenCart = openCart;
 </script>

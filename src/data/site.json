@@ -12,24 +12,27 @@
       "bg": "#FFFFFF",
       "ink": "#0E2032",
       "soft": "#B0BDCB"
-    }
+    },
+    "whatsapp": "+5492494550855",
+    "whatsapp_digits": "5492494550855",
+    "phone": "+5492494550855"
   },
   "about": {
-    "title": "Sobre mi",
+    "title": "Sobre mí",
     "body": "Me dedico especialmente a fotografiar la naturaleza, los deportes ecuestres y la vida rural.\nA través de la fotografía busco capturar momentos auténticos y transmitir mi manera de ver el mundo que me rodea: la conexión entre las personas, los animales y el paisaje.\nNací en Tandil, Buenos Aires, Argentina, un lugar rodeado de naturaleza y animales que marcó profundamente mi forma de mirar y de contar historias a través de la cámara. Esa cercanía con el campo y la vida rural es hoy la esencia de mi trabajo.\nRealizo proyectos personales y trabajos por encargo vinculados a la vida rural, actividades de campo y deportes ecuestres, tanto para particulares como para emprendimientos, criadores, jinetes, eventos y marcas relacionadas con este ámbito.",
     "image": "/images/sobre-mi.jpg"
   },
   "nav": [
     {
-      "label": "Work",
+      "label": "Tienda",
       "href": "/"
     },
     {
-      "label": "Tienda",
-      "href": "/tienda"
+      "label": "Trabajos",
+      "href": "/trabajos"
     },
     {
-      "label": "Sobre mi",
+      "label": "Sobre mí",
       "href": "/sobre-mi"
     },
     {
@@ -116,9 +119,23 @@
   "shop": {
     "currency": "ARS",
     "currencySymbol": "$",
-    "intro": "Buscá tus fotos por evento, por número de dorsal o subiendo un selfie. Elegí las que quieras y pagá online o por transferencia.",
+    "intro": "Elegí el evento o buscá tus fotos con un selfie. También podés llevarte series del portafolio.",
+    "formats": {
+      "default": "redes",
+      "options": [
+        {
+          "id": "redes",
+          "label": "Para redes",
+          "hint": "Archivo liviano, listo para subir a IG/web."
+        },
+        {
+          "id": "impresion",
+          "label": "Para impresión",
+          "hint": "Alta resolución para imprimir (hasta el tamaño que indique Sole)."
+        }
+      ]
+    },
     "paymentMethods": [
-      "mercado_pago",
       "transferencia"
     ],
     "transfer": {
@@ -126,6 +143,10 @@
       "cbu": null,
       "owner": "Sole Yaquinta"
     },
+    "events_title": "Eventos",
+    "events_empty": "Todavía no hay álbumes de eventos publicados. Cuando Sole suba uno, aparece acá arriba.",
+    "portfolio_title": "Del portafolio",
+    "portfolio_intro": "Selección de trabajos. Más chiquitas acá abajo, pero también se pueden comprar.",
     "albums": [
       {
         "id": "paisajes",
@@ -180,9 +201,10 @@
             "price": 25000
           }
         ],
-        "message": "Las fotografías se envían en alta resolución al email que registres. Podés usarlas en redes o imprimirlas por tu cuenta hasta 30×45 cm. Si querés un tamaño más grande, un cuadro o un fotolibro, escribinme y lo vemos.",
-        "search_by_face": true,
-        "search_by_number": true
+        "message": "Alta resolución. Cuando confirmamos la transferencia por WhatsApp, te la mando por ahí.",
+        "search_by_face": false,
+        "search_by_number": false,
+        "kind": "portfolio"
       },
       {
         "id": "cordillera",
@@ -272,9 +294,10 @@
             "price": 25000
           }
         ],
-        "message": "Las fotografías se envían en alta resolución al email que registres. Podés usarlas en redes o imprimirlas por tu cuenta hasta 30×45 cm. Si querés un tamaño más grande, un cuadro o un fotolibro, escribinme y lo vemos.",
-        "search_by_face": true,
-        "search_by_number": true
+        "message": "Alta resolución. Cuando confirmamos la transferencia por WhatsApp, te la mando por ahí.",
+        "search_by_face": false,
+        "search_by_number": false,
+        "kind": "portfolio"
       },
       {
         "id": "pruebas-de-riendas",
@@ -324,9 +347,10 @@
             "price": 25000
           }
         ],
-        "message": "Las fotografías se envían en alta resolución al email que registres. Podés usarlas en redes o imprimirlas por tu cuenta hasta 30×45 cm. Si querés un tamaño más grande, un cuadro o un fotolibro, escribinme y lo vemos.",
-        "search_by_face": true,
-        "search_by_number": true
+        "message": "Alta resolución. Cuando confirmamos la transferencia por WhatsApp, te la mando por ahí.",
+        "search_by_face": false,
+        "search_by_number": false,
+        "kind": "portfolio"
       },
       {
         "id": "la-makeka",
@@ -421,9 +445,10 @@
             "price": 25000
           }
         ],
-        "message": "Las fotografías se envían en alta resolución al email que registres. Podés usarlas en redes o imprimirlas por tu cuenta hasta 30×45 cm. Si querés un tamaño más grande, un cuadro o un fotolibro, escribinme y lo vemos.",
-        "search_by_face": true,
-        "search_by_number": true
+        "message": "Alta resolución. Cuando confirmamos la transferencia por WhatsApp, te la mando por ahí.",
+        "search_by_face": false,
+        "search_by_number": false,
+        "kind": "portfolio"
       }
     ]
   }

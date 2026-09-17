@@ -12,6 +12,9 @@ function isActive(href: string) {
 
 <header class="site-header" id="site-header" data-header>
   <div class="header-left">
+    <a class="logo-link" href="/" aria-label={site.brand.name}>
+      <img src="/images/logo.png" alt={site.brand.name} width="160" height="136" />
+    </a>
     <nav aria-label="Principal">
       <ul class="nav-desktop">
         {
@@ -27,13 +30,14 @@ function isActive(href: string) {
     </nav>
   </div>
 
-  <a class="logo-link" href="/" aria-label={site.brand.name}>
-    <img src="/images/logo.png" alt={site.brand.name} width="120" height="100" />
-  </a>
-
   <div class="header-right">
-    <button type="button" class="cart-chip" data-open-cart aria-label="Carrito">
-      Carrito
+    <button type="button" class="cart-chip cart-chip--icon" data-open-cart aria-label="Carrito">
+      <svg class="cart-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 6h15l-1.5 9h-12z"></path>
+        <path d="M6 6 5 3H2"></path>
+        <circle cx="9" cy="20" r="1.2" fill="currentColor" stroke="none"></circle>
+        <circle cx="18" cy="20" r="1.2" fill="currentColor" stroke="none"></circle>
+      </svg>
       <span class="count" data-cart-count data-count="0"></span>
     </button>
     <button type="button" class="hamburger" data-menu-toggle aria-label="Menú" aria-expanded="false">

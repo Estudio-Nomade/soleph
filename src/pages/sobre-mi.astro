@@ -3,24 +3,34 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import site from '../data/site.json';
 
 const paragraphs = site.about.body.split(/\n+/).filter(Boolean);
+const lead = paragraphs[0] || '';
+const wa = site.brand.whatsapp_digits || '5492494550855';
 ---
 
-<BaseLayout title="Sobre mi" description={paragraphs[0]} ogImage={site.about.image}>
-  <main class="page">
-    <header class="page-header">
-      <h1>{site.about.title}</h1>
-    </header>
-
-    <div class="about-layout">
-      <div class="about-copy">
-        {paragraphs.map((p) => <p>{p}</p>)}
-      </div>
+<BaseLayout title="Sobre mí" description={lead} ogImage={site.about.image}>
+  <main class="page page--about">
+    <section class="about-hero">
       <div class="about-photo">
         <img src={site.about.image} alt={site.brand.name} width="1200" height="1500" loading="eager" />
       </div>
-    </div>
 
-    <section class="related" style="margin-top: 3rem;">
+      <div class="about-copy-col">
+        <p class="about-kicker">{site.brand.tagline}</p>
+        <h1>Sobre mí</h1>
+        <p class="about-place">{site.brand.location}</p>
+
+        <div class="about-body">
+          {paragraphs.map((p) => <p>{p}</p>)}
+        </div>
+
+        <div class="about-actions">
+          <a class="btn" href={`https://wa.me/${wa}`} target="_blank" rel="noopener">Escribime</a>
+          <a class="btn btn-ghost" href="/trabajos">Ver trabajos</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="related about-related">
       <h2>También te puede interesar</h2>
       <div class="related-grid">
         {

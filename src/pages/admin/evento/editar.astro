@@ -1,0 +1,535 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Editar evento">
+  <div data-admin-edit>
+    <div class="admin-head">
+      <div>
+        <h1 data-title>Evento</h1>
+        <p data-sub>Editá datos, precios y fotos.</p>
+      </div>
+      <div class="admin-actions">
+        <a class="admin-btn admin-btn--ghost" href="/admin">Volver</a>
+        <button type="button" class="admin-btn admin-btn--ghost" data-toggle-publish hidden>Publicar</button>
+      </div>
+    </div>
+
+    <p class="admin-msg admin-msg--error" data-error hidden></p>
+    <p class="admin-msg admin-msg--ok" data-ok hidden></p>
+    <p class="admin-msg admin-msg--info" data-loading>Cargando…</p>
+
+    <div data-ready hidden>
+      <div class="admin-card">
+        <h2 class="admin-section-title">Datos</h2>
+        <form class="admin-form" data-form-meta>
+          <label>
+            Nombre
+            <input name="name" required maxlength="120" />
+          </label>
+          <div class="admin-grid-2">
+            <label>
+              Slug
+              <input name="slug" required maxlength="80" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" />
+            </label>
+            <label>
+              Fecha (texto)
+              <input name="date_label" maxlength="80" />
+            </label>
+          </div>
+          <div class="admin-grid-2">
+            <label>
+              Tipo
+              <select name="kind">
+                <option value="event">Evento</option>
+                <option value="portfolio">Portafolio</option>
+              </select>
+            </label>
+            <label>
+              Precio unitario (ARS)
+              <input name="photo_price_ars" type="number" min="0" step="100" required />
+            </label>
+          </div>
+          <label>
+            Mensaje al comprador
+            <textarea name="message" maxlength="500"></textarea>
+          </label>
+          <label class="admin-check">
+            <input type="checkbox" name="search_by_face" />
+            Buscar por cara habilitado
+          </label>
+          <label class="admin-check">
+            <input type="checkbox" name="published" />
+            Publicado en la tienda
+          </label>
+          <button class="admin-btn" type="submit" data-save-meta>Guardar datos</button>
+        </form>
+      </div>
+
+      <div class="admin-card">
+        <h2 class="admin-section-title">Packs (tiers)</h2>
+        <p class="admin-muted" style="margin-top:0">
+          Ej: 3 fotos a $10.000. Si no hay packs, vale el precio unitario.
+        </p>
+        <div class="admin-tiers" data-tiers></div>
+        <div class="admin-actions" style="margin-top:0.75rem">
+          <button type="button" class="admin-btn admin-btn--ghost" data-add-tier>Agregar pack</button>
+          <button type="button" class="admin-btn" data-save-tiers>Guardar packs</button>
+        </div>
+      </div>
+
+      <div class="admin-card">
+        <h2 class="admin-section-title">Fotos</h2>
+        <p class="admin-muted" style="margin-top:0">
+          Se sube el original (privado) y un preview con marca de agua (público). Si “buscar por cara” está on,
+          indexamos caras al subir (sin AWS; embeddings locales).
+        </p>
+
+        <div class="admin-drop" data-drop>
+          <p style="margin:0 0 0.75rem">Arrastrá fotos acá o elegí archivos</p>
+          <label class="admin-btn admin-btn--ghost" style="cursor:pointer">
+            Elegir fotos
+            <input type="file" accept="image/*" multiple data-file-input />
+          </label>
+          <p class="admin-progress" data-upload-status hidden></p>
+        </div>
+        <div class="admin-actions" style="margin-top:0.75rem">
+          <button type="button" class="admin-btn admin-btn--ghost" data-reindex-faces>
+            Reindexar caras del evento
+          </button>
+        </div>
+
+        <div class="admin-photos" data-photos style="margin-top:1rem"></div>
+        <p class="admin-empty" data-photos-empty hidden>Todavía no hay fotos en este evento.</p>
+      </div>
+
+      <div class="admin-card">
+        <h2 class="admin-section-title">Zona de riesgo</h2>
+        <button type="button" class="admin-btn admin-btn--danger" data-delete-album>Borrar evento</button>
+      </div>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  import { requireAdminOrRedirect, formatArs } from '../../../lib/admin-auth.js';
+  import { getSupabase, publicStorageUrl, BUCKETS } from '../../../lib/supabase.js';
+  import { makeWatermarkedPreview, safeFileBase } from '../../../lib/watermark.js';
+  import { indexPhotoFaces } from '../../../lib/face.js';
+
+  const root = document.querySelector('[data-admin-edit]');
+  const albumId = new URLSearchParams(window.location.search).get('id');
+  const errEl = root?.querySelector('[data-error]');
+  const okEl = root?.querySelector('[data-ok]');
+  const loadingEl = root?.querySelector('[data-loading]');
+  const readyEl = root?.querySelector('[data-ready]');
+  const titleEl = root?.querySelector('[data-title]');
+  const subEl = root?.querySelector('[data-sub]');
+  const form = root?.querySelector('[data-form-meta]');
+  const tiersEl = root?.querySelector('[data-tiers]');
+  const photosEl = root?.querySelector('[data-photos]');
+  const photosEmpty = root?.querySelector('[data-photos-empty]');
+  const drop = root?.querySelector('[data-drop]');
+  const fileInput = root?.querySelector('[data-file-input]');
+  const uploadStatus = root?.querySelector('[data-upload-status]');
+  const togglePublishBtn = root?.querySelector('[data-toggle-publish]');
+
+  /** @type {any} */
+  let album = null;
+  /** @type {any[]} */
+  let photos = [];
+
+  function showError(msg) {
+    if (!errEl) return;
+    errEl.hidden = !msg;
+    errEl.textContent = msg || '';
+    if (msg) window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  function showOk(msg) {
+    if (!okEl) return;
+    okEl.hidden = !msg;
+    okEl.textContent = msg || '';
+  }
+
+  function tierRow(qty = 3, price = 10000) {
+    const row = document.createElement('div');
+    row.className = 'admin-tier-row';
+    row.innerHTML = `
+      <label>Cantidad
+        <input type="number" min="2" step="1" name="qty" value="${qty}" />
+      </label>
+      <label>Precio pack (ARS)
+        <input type="number" min="0" step="100" name="price" value="${price}" />
+      </label>
+      <button type="button" class="admin-btn admin-btn--ghost" data-remove-tier>Quitar</button>
+    `;
+    row.querySelector('[data-remove-tier]')?.addEventListener('click', () => row.remove());
+    return row;
+  }
+
+  function readTiers() {
+    if (!tiersEl) return [];
+    return [...tiersEl.querySelectorAll('.admin-tier-row')]
+      .map((row) => {
+        const quantity = Number(row.querySelector('[name="qty"]')?.value || 0);
+        const price = Number(row.querySelector('[name="price"]')?.value || 0);
+        return { quantity, price };
+      })
+      .filter((t) => t.quantity >= 2 && t.price >= 0)
+      .sort((a, b) => a.quantity - b.quantity);
+  }
+
+  function fillForm() {
+    if (!form || !album) return;
+    form.name.value = album.name || '';
+    form.slug.value = album.slug || '';
+    form.date_label.value = album.date_label || '';
+    form.kind.value = album.kind === 'portfolio' ? 'portfolio' : 'event';
+    form.photo_price_ars.value = album.photo_price_ars ?? 5000;
+    form.message.value = album.message || '';
+    form.search_by_face.checked = album.search_by_face !== false;
+    form.published.checked = Boolean(album.published);
+    if (titleEl) titleEl.textContent = album.name || 'Evento';
+    if (subEl) {
+      subEl.textContent = album.published
+        ? `Publicado · ${formatArs(album.photo_price_ars)} c/u`
+        : `Borrador · ${formatArs(album.photo_price_ars)} c/u`;
+    }
+    if (togglePublishBtn) {
+      togglePublishBtn.hidden = false;
+      togglePublishBtn.textContent = album.published ? 'Despublicar' : 'Publicar';
+    }
+    if (tiersEl) {
+      tiersEl.innerHTML = '';
+      const tiers = Array.isArray(album.price_tiers) ? album.price_tiers : [];
+      if (!tiers.length) tiersEl.appendChild(tierRow(3, Math.max((album.photo_price_ars || 5000) * 2, 10000)));
+      else tiers.forEach((t) => tiersEl.appendChild(tierRow(t.quantity, t.price)));
+    }
+  }
+
+  function renderPhotos() {
+    if (!photosEl) return;
+    photosEl.innerHTML = '';
+    if (!photos.length) {
+      photosEmpty && (photosEmpty.hidden = false);
+      return;
+    }
+    photosEmpty && (photosEmpty.hidden = true);
+    const cover = album?.cover_path || '';
+    for (const p of photos) {
+      const url = publicStorageUrl(BUCKETS.previews, p.preview_path);
+      const isCover = cover && (cover === p.preview_path || cover.endsWith(p.preview_path));
+      const el = document.createElement('div');
+      el.className = 'admin-photo' + (isCover ? ' is-cover' : '');
+      el.innerHTML = `
+        <img src="${url}" alt="" loading="lazy" />
+        <div class="admin-photo-actions">
+          <button type="button" data-cover>Cover</button>
+          <button type="button" data-del>Borrar</button>
+        </div>
+      `;
+      el.querySelector('[data-cover]')?.addEventListener('click', () => setCover(p));
+      el.querySelector('[data-del]')?.addEventListener('click', () => deletePhoto(p));
+      photosEl.appendChild(el);
+    }
+  }
+
+  async function setCover(photo) {
+    showError('');
+    showOk('');
+    try {
+      const sb = getSupabase();
+      const { error } = await sb
+        .from('albums')
+        .update({ cover_path: photo.preview_path, updated_at: new Date().toISOString() })
+        .eq('id', albumId);
+      if (error) throw error;
+      album.cover_path = photo.preview_path;
+      showOk('Cover actualizado');
+      renderPhotos();
+    } catch (err) {
+      showError(err?.message || 'No se pudo setear cover');
+    }
+  }
+
+  async function deletePhoto(photo) {
+    if (!confirm('¿Borrar esta foto?')) return;
+    showError('');
+    try {
+      const sb = getSupabase();
+      const pathsPreview = photo.preview_path ? [photo.preview_path] : [];
+      const pathsOriginal = photo.original_path ? [photo.original_path] : [];
+      if (pathsPreview.length) await sb.storage.from(BUCKETS.previews).remove(pathsPreview);
+      if (pathsOriginal.length) await sb.storage.from(BUCKETS.originals).remove(pathsOriginal);
+      await sb.from('face_embeddings').delete().eq('photo_id', photo.id);
+      const { error } = await sb.from('photos').delete().eq('id', photo.id);
+      if (error) throw error;
+      if (album.cover_path === photo.preview_path) {
+        await sb.from('albums').update({ cover_path: null }).eq('id', albumId);
+        album.cover_path = null;
+      }
+      photos = photos.filter((p) => p.id !== photo.id);
+      renderPhotos();
+      showOk('Foto borrada');
+    } catch (err) {
+      showError(err?.message || 'No se pudo borrar');
+    }
+  }
+
+  async function uploadFiles(fileList) {
+    const files = [...fileList].filter((f) => f.type.startsWith('image/'));
+    if (!files.length) return;
+    showError('');
+    showOk('');
+    uploadStatus && (uploadStatus.hidden = false);
+    const sb = getSupabase();
+    let done = 0;
+    const startOrder = photos.reduce((m, p) => Math.max(m, p.sort_order || 0), 0);
+
+    for (const file of files) {
+      try {
+        uploadStatus && (uploadStatus.textContent = `Procesando ${done + 1}/${files.length}: ${file.name}`);
+        const { previewBlob, width, height } = await makeWatermarkedPreview(file);
+        const base = `${albumId}/${Date.now().toString(36)}-${safeFileBase(file.name)}`;
+        const previewPath = `${base}-wm.jpg`;
+        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+        const originalPath = `${base}-full.${ext}`;
+
+        const upPrev = await sb.storage.from(BUCKETS.previews).upload(previewPath, previewBlob, {
+          contentType: 'image/jpeg',
+          upsert: false,
+        });
+        if (upPrev.error) throw upPrev.error;
+
+        const upOrig = await sb.storage.from(BUCKETS.originals).upload(originalPath, file, {
+          contentType: file.type || 'image/jpeg',
+          upsert: false,
+        });
+        if (upOrig.error) throw upOrig.error;
+
+        const sort_order = startOrder + done + 1;
+        const { data: row, error } = await sb
+          .from('photos')
+          .insert({
+            album_id: albumId,
+            preview_path: previewPath,
+            original_path: originalPath,
+            width,
+            height,
+            sort_order,
+          })
+          .select('*')
+          .single();
+        if (error) throw error;
+        photos.push(row);
+
+        if (!album.cover_path) {
+          await sb.from('albums').update({ cover_path: previewPath }).eq('id', albumId);
+          album.cover_path = previewPath;
+        }
+
+        // index faces from watermarked preview (same pixels the shop shows)
+        if (album.search_by_face !== false) {
+          try {
+            uploadStatus && (uploadStatus.textContent = `Indexando caras ${done + 1}/${files.length}…`);
+            const faceRes = await indexPhotoFaces({
+              photoId: row.id,
+              albumId,
+              image: previewBlob,
+            });
+            row._faces = faceRes.faces;
+          } catch (faceErr) {
+            console.warn('face index', faceErr);
+          }
+        }
+      } catch (err) {
+        showError(`${file.name}: ${err?.message || 'error al subir'}`);
+      }
+      done += 1;
+      uploadStatus && (uploadStatus.textContent = `Subidas ${done}/${files.length}`);
+    }
+
+    photos.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    renderPhotos();
+    const faced = photos.filter((p) => typeof p._faces === 'number').reduce((n, p) => n + (p._faces || 0), 0);
+    showOk(done ? `Listo: ${done} archivo(s)${faced ? ` · ${faced} cara(s) indexadas` : ''}` : '');
+    setTimeout(() => {
+      if (uploadStatus) uploadStatus.hidden = true;
+    }, 2500);
+  }
+
+  async function reindexAllFaces() {
+    if (!photos.length) {
+      showError('No hay fotos para indexar');
+      return;
+    }
+    showError('');
+    showOk('');
+    uploadStatus && (uploadStatus.hidden = false);
+    let n = 0;
+    let faces = 0;
+    for (const p of photos) {
+      n += 1;
+      uploadStatus && (uploadStatus.textContent = `Reindex ${n}/${photos.length}…`);
+      try {
+        const url = publicStorageUrl(BUCKETS.previews, p.preview_path);
+        const res = await indexPhotoFaces({ photoId: p.id, albumId, image: url });
+        faces += res.faces || 0;
+      } catch (err) {
+        showError(`${p.preview_path}: ${err?.message || 'error de caras'}`);
+      }
+    }
+    uploadStatus && (uploadStatus.hidden = true);
+    showOk(`Reindex listo · ${faces} cara(s) en ${photos.length} foto(s)`);
+  }
+
+  async function load() {
+    if (!albumId) {
+      showError('Falta id de evento (?id=…)');
+      loadingEl && (loadingEl.hidden = true);
+      return;
+    }
+    const gate = await requireAdminOrRedirect();
+    if (!gate) return;
+
+    try {
+      const sb = getSupabase();
+      const { data: a, error: aErr } = await sb.from('albums').select('*').eq('id', albumId).single();
+      if (aErr) throw aErr;
+      album = a;
+      const { data: ph, error: pErr } = await sb
+        .from('photos')
+        .select('*')
+        .eq('album_id', albumId)
+        .order('sort_order', { ascending: true });
+      if (pErr) throw pErr;
+      photos = ph || [];
+      fillForm();
+      renderPhotos();
+      loadingEl && (loadingEl.hidden = true);
+      readyEl && (readyEl.hidden = false);
+    } catch (err) {
+      loadingEl && (loadingEl.hidden = true);
+      showError(err?.message || 'No se pudo cargar el evento');
+    }
+  }
+
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    showError('');
+    showOk('');
+    const fd = new FormData(form);
+    const payload = {
+      name: String(fd.get('name') || '').trim(),
+      slug: String(fd.get('slug') || '').trim(),
+      date_label: String(fd.get('date_label') || '').trim() || null,
+      kind: String(fd.get('kind') || 'event') === 'portfolio' ? 'portfolio' : 'event',
+      photo_price_ars: Number(fd.get('photo_price_ars') || 0),
+      message: String(fd.get('message') || '').trim() || null,
+      search_by_face: fd.get('search_by_face') === 'on',
+      published: fd.get('published') === 'on',
+      updated_at: new Date().toISOString(),
+    };
+    try {
+      const sb = getSupabase();
+      const { data, error } = await sb.from('albums').update(payload).eq('id', albumId).select('*').single();
+      if (error) throw error;
+      album = data;
+      fillForm();
+      showOk('Datos guardados');
+    } catch (err) {
+      showError(err?.message || 'No se pudo guardar');
+    }
+  });
+
+  root?.querySelector('[data-add-tier]')?.addEventListener('click', () => {
+    tiersEl?.appendChild(tierRow());
+  });
+
+  root?.querySelector('[data-save-tiers]')?.addEventListener('click', async () => {
+    showError('');
+    showOk('');
+    const price_tiers = readTiers();
+    try {
+      const sb = getSupabase();
+      const { data, error } = await sb
+        .from('albums')
+        .update({ price_tiers, updated_at: new Date().toISOString() })
+        .eq('id', albumId)
+        .select('*')
+        .single();
+      if (error) throw error;
+      album = data;
+      showOk('Packs guardados');
+    } catch (err) {
+      showError(err?.message || 'No se pudieron guardar los packs');
+    }
+  });
+
+  togglePublishBtn?.addEventListener('click', async () => {
+    if (!album) return;
+    showError('');
+    showOk('');
+    try {
+      const sb = getSupabase();
+      const published = !album.published;
+      const { data, error } = await sb
+        .from('albums')
+        .update({ published, updated_at: new Date().toISOString() })
+        .eq('id', albumId)
+        .select('*')
+        .single();
+      if (error) throw error;
+      album = data;
+      if (form) form.published.checked = published;
+      fillForm();
+      showOk(published ? 'Evento publicado' : 'Pasó a borrador');
+    } catch (err) {
+      showError(err?.message || 'No se pudo cambiar publicación');
+    }
+  });
+
+  root?.querySelector('[data-delete-album]')?.addEventListener('click', async () => {
+    if (!confirm('Esto borra el evento y sus fotos en la base. ¿Seguro?')) return;
+    try {
+      const sb = getSupabase();
+      const pathsP = photos.map((p) => p.preview_path).filter(Boolean);
+      const pathsO = photos.map((p) => p.original_path).filter(Boolean);
+      if (pathsP.length) await sb.storage.from(BUCKETS.previews).remove(pathsP);
+      if (pathsO.length) await sb.storage.from(BUCKETS.originals).remove(pathsO);
+      const { error } = await sb.from('albums').delete().eq('id', albumId);
+      if (error) throw error;
+      window.location.assign('/admin');
+    } catch (err) {
+      showError(err?.message || 'No se pudo borrar');
+    }
+  });
+
+  fileInput?.addEventListener('change', () => {
+    if (fileInput.files?.length) uploadFiles(fileInput.files);
+    fileInput.value = '';
+  });
+
+  root?.querySelector('[data-reindex-faces]')?.addEventListener('click', () => {
+    reindexAllFaces();
+  });
+
+  ;['dragenter', 'dragover'].forEach((ev) => {
+    drop?.addEventListener(ev, (e) => {
+      e.preventDefault();
+      drop.classList.add('is-drag');
+    });
+  });
+  ;['dragleave', 'drop'].forEach((ev) => {
+    drop?.addEventListener(ev, (e) => {
+      e.preventDefault();
+      drop.classList.remove('is-drag');
+    });
+  });
+  drop?.addEventListener('drop', (e) => {
+    const dt = e.dataTransfer;
+    if (dt?.files?.length) uploadFiles(dt.files);
+  });
+
+  load();
+</script>
