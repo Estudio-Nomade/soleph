@@ -150,6 +150,7 @@ export async function searchAlbumBySelfie({
 
   const matches = (json.matches || []).map((row) => ({
     photoId: row.photoId,
+    code: row.code || String(row.photoId || '').replace(/-/g, '').slice(0, 8).toUpperCase(),
     distance: row.similarity != null ? 100 - Number(row.similarity) : undefined,
     similarity: row.similarity,
     previewPath: row.previewPath,

@@ -65,6 +65,7 @@ const isPortfolio = album.kind === 'portfolio';
             class="photo-tile"
             data-photo
             data-id={photo.id}
+            data-code={photo.code || String(photo.id).replace(/-/g, '').slice(0, 8).toUpperCase()}
             data-src={photo.src}
             data-thumb={photo.thumb}
             data-album-id={album.id}
@@ -110,6 +111,7 @@ const isPortfolio = album.kind === 'portfolio';
       } else {
         addToCart({
           id,
+          code: tile.getAttribute('data-code') || '',
           src,
           thumb: tile.getAttribute('data-thumb') || src,
           albumId: tile.getAttribute('data-album-id') || '',

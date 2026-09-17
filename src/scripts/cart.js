@@ -10,6 +10,10 @@ function readCart() {
     return data.map((item) => ({
       ...item,
       format: item.format === 'impresion' ? 'impresion' : DEFAULT_FORMAT,
+      code:
+        item.code ||
+        (item.id && String(item.id).replace(/-/g, '').slice(0, 8).toUpperCase()) ||
+        '',
     }));
   } catch {
     return [];
@@ -32,8 +36,13 @@ export function cartCount() {
 export function addToCart(item) {
   const items = readCart();
   if (items.some((x) => x.id === item.id)) return items;
+  const code =
+    item.code ||
+    (item.id && String(item.id).replace(/-/g, '').slice(0, 8).toUpperCase()) ||
+    '';
   items.push({
     id: item.id,
+    code,
     src: item.src,
     thumb: item.thumb || item.src,
     albumId: item.albumId,

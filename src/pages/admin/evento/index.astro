@@ -100,7 +100,12 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       date_label: String(fd.get('date_label') || '').trim() || null,
       message: String(fd.get('message') || '').trim() || null,
       photo_price_ars: Number(fd.get('photo_price_ars') || 0),
-      price_tiers: [],
+      price_tiers: [
+        { quantity: 1, price: Number(fd.get('photo_price_ars') || 5000) },
+        { quantity: 3, price: Number(fd.get('photo_price_ars') || 5000) * 2 },
+        { quantity: 5, price: Number(fd.get('photo_price_ars') || 5000) * 3 },
+        { quantity: 10, price: Number(fd.get('photo_price_ars') || 5000) * 5 },
+      ],
       search_by_face: fd.get('search_by_face') === 'on',
       published: false,
     };
@@ -113,6 +118,17 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       const sb = getSupabase();
       const { data, error } = await sb.from('albums').insert(payload).select('id').single();
       if (error) throw error;
+      // seed categorías típicas (si ya corriste categories.sql)
+      try {
+        const defaults = [
+          { name: 'Mansos', slug: 'mansos', sort_order: 0 },
+          { name: 'Potros', slug: 'potros', sort_order: 1 },
+          { name: 'Damas', slug: 'damas', sort_order: 2 },
+        ].map((c) => ({ ...c, album_id: data.id }));
+        await sb.from('categories').insert(defaults);
+      } catch (_) {
+        /* tabla opcional */
+      }
       window.location.assign(`/admin/evento/editar?id=${data.id}`);
     } catch (err) {
       showError(err?.message || 'No se pudo crear');
