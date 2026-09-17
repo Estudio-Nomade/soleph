@@ -1,0 +1,37 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import site from '../data/site.json';
+---
+
+<BaseLayout
+  title="Trabajos"
+  description={`${site.brand.name} — fotografía de naturaleza, deporte ecuestre y vida rural.`}
+>
+  <main class="page">
+    <header class="page-header">
+      <h1>Trabajos</h1>
+      <p>Selección de proyectos y series.</p>
+    </header>
+
+    <section class="work-grid" aria-label="Proyectos">
+      {
+        site.projects.map((project) => (
+          <a class="work-card" href={project.href}>
+            <img class="cover" src={project.cover} alt={project.title} loading="lazy" width="1200" height="900" />
+            <div class="meta">
+              <div class="title">{project.title}</div>
+              <div class="year">{project.year}</div>
+            </div>
+          </a>
+        ))
+      }
+      <a class="work-card" href="/sobre-mi">
+        <img class="cover" src="/images/covers/sobre-mi.jpg" alt="Sobre mí" loading="lazy" width="1200" height="900" />
+        <div class="meta">
+          <div class="title">Sobre mí</div>
+          <div class="year">2026</div>
+        </div>
+      </a>
+    </section>
+  </main>
+</BaseLayout>

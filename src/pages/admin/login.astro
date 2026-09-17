@@ -1,0 +1,91 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Login" bare>
+  <div class="admin-card admin-login" data-admin-login>
+    <h1>Panel de Sole</h1>
+    <p>Entrá con tu usuario de admin para cargar eventos y fotos.</p>
+
+    <p class="admin-msg admin-msg--error" data-error hidden></p>
+    <p class="admin-msg admin-msg--info" data-setup hidden>
+      Falta configurar Supabase en <code>.env</code> (<code>PUBLIC_SUPABASE_URL</code> y
+      <code>PUBLIC_SUPABASE_ANON_KEY</code>).
+    </p>
+
+    <form class="admin-form" data-form>
+      <label>
+        Email
+        <input type="email" name="email" autocomplete="username" required />
+      </label>
+      <label>
+        Contraseña
+        <input type="password" name="password" autocomplete="current-password" required minlength="6" />
+      </label>
+      <button class="admin-btn admin-btn-block" type="submit" data-submit>Entrar</button>
+    </form>
+  </div>
+</AdminLayout>
+
+<script>
+  import { getSupabase, isSupabaseConfigured } from '../../lib/supabase.js';
+  import { getAdminSession } from '../../lib/admin-auth.js';
+
+  const root = document.querySelector('[data-admin-login]');
+  const form = root?.querySelector('[data-form]');
+  const errEl = root?.querySelector('[data-error]');
+  const setupEl = root?.querySelector('[data-setup]');
+  const submitBtn = root?.querySelector('[data-submit]');
+
+  const params = new URLSearchParams(window.location.search);
+  const next = params.get('next') || '/admin';
+  const bootError = params.get('error');
+
+  function showError(msg) {
+    if (!errEl) return;
+    errEl.hidden = !msg;
+    errEl.textContent = msg || '';
+  }
+
+  if (bootError) showError(bootError);
+
+  if (!isSupabaseConfigured()) {
+    setupEl && (setupEl.hidden = false);
+    form && (form.hidden = true);
+  } else {
+    getAdminSession()
+      .then((r) => {
+        if (r.session && r.profile?.role === 'admin') {
+          window.location.replace(next.startsWith('/admin') ? next : '/admin');
+        }
+      })
+      .catch(() => {});
+  }
+
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    showError('');
+    if (!isSupabaseConfigured()) {
+      showError('Supabase no está configurado.');
+      return;
+    }
+    const fd = new FormData(form);
+    const email = String(fd.get('email') || '').trim();
+    const password = String(fd.get('password') || '');
+    submitBtn && (submitBtn.disabled = true);
+    try {
+      const sb = getSupabase();
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      const gate = await getAdminSession();
+      if (!gate.profile || gate.profile.role !== 'admin') {
+        await sb.auth.signOut();
+        throw new Error('Tu usuario no tiene rol admin. Pedile a quien armó el proyecto que te active el perfil.');
+      }
+      window.location.replace(next.startsWith('/admin') ? next : '/admin');
+    } catch (err) {
+      showError(err?.message || 'No se pudo entrar');
+      submitBtn && (submitBtn.disabled = false);
+    }
+  });
+</script>

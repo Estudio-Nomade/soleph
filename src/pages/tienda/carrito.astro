@@ -2,17 +2,25 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import site from '../../data/site.json';
 
-// default pricing from first album for tier math when mixed
 const sample = site.shop.albums[0];
 const unit = sample?.photo_price ?? 5000;
 const tiers = sample?.price_tiers ?? [];
+const formats = site.shop.formats || {
+  default: 'redes',
+  options: [
+    { id: 'redes', label: 'Para redes', hint: 'Archivo liviano, listo para subir.' },
+    { id: 'impresion', label: 'Para impresión', hint: 'Alta resolución para imprimir.' },
+  ],
+};
+const wa = site.brand.whatsapp_digits || '5492494550855';
+const transfer = site.shop.transfer || { owner: 'Sole Yaquinta', alias: null, cbu: null };
 ---
 
-<BaseLayout title="Carrito" description="Revisá tus fotos y pagá">
+<BaseLayout title="Carrito" description="Transferí y mandá el pedido a Sole por WhatsApp">
   <main class="page">
     <header class="page-header">
       <h1>Carrito</h1>
-      <p>Revisá la selección y elegí cómo pagar.</p>
+      <p>Elegí el formato, transferí el total y abrí WhatsApp para mandar el pedido con el comprobante.</p>
     </header>
 
     <div class="checkout-grid">
@@ -24,73 +32,75 @@ const tiers = sample?.price_tiers ?? [];
       </section>
 
       <section class="checkout-summary">
-        <h2>Pago</h2>
+        <h2>Pago por transferencia</h2>
         <div class="cart-total" style="margin-bottom:0.75rem;">
-          <span>Total</span>
+          <span>Total a transferir</span>
           <span data-page-total>$0</span>
         </div>
         <div class="tier-hint" data-page-tier></div>
 
-        <form class="contact-form" data-checkout-form style="max-width:none; margin-top:1rem;">
+        <div class="transfer-box is-on" data-transfer-box>
+          <div><strong>Titular:</strong> {transfer.owner || 'Sole Yaquinta'}</div>
+          <div><strong>Alias:</strong> {transfer.alias || 'Sole te lo confirma por WhatsApp si hace falta'}</div>
+          {transfer.cbu && <div><strong>CBU/CVU:</strong> {transfer.cbu}</div>}
+          <p class="field-hint" style="margin-top:0.65rem;">
+            1) Transferí el total · 2) Abrí WhatsApp con el pedido · 3) Adjuntá el comprobante en ese chat.
+          </p>
+        </div>
+
+        <form class="contact-form" data-checkout-form style="max-width:none; margin-top:1rem;" data-wa={wa}>
           <div class="field">
             <label for="c-name">Nombre *</label>
             <input id="c-name" name="name" required autocomplete="name" />
           </div>
           <div class="field">
-            <label for="c-email">Email para recibir las fotos *</label>
-            <input id="c-email" name="email" type="email" required autocomplete="email" />
-          </div>
-          <div class="field">
-            <label for="c-phone">Teléfono</label>
-            <input id="c-phone" name="phone" type="tel" autocomplete="tel" />
-          </div>
-
-          <div class="pay-options">
-            <label class="pay-option">
-              <input type="radio" name="pay" value="mercado_pago" checked />
-              <div>
-                <strong>Mercado Pago</strong>
-                <span>Tarjeta, dinero en cuenta o cuotas. Listo para conectar la preferencia real.</span>
-              </div>
-            </label>
-            <label class="pay-option">
-              <input type="radio" name="pay" value="transferencia" />
-              <div>
-                <strong>Transferencia</strong>
-                <span>Te pasamos los datos al confirmar. El pedido queda pendiente de acreditación.</span>
-              </div>
-            </label>
+            <label for="c-phone">Tu WhatsApp *</label>
+            <input
+              id="c-phone"
+              name="phone"
+              type="tel"
+              required
+              autocomplete="tel"
+              placeholder="Para enviarte las fotos"
+            />
           </div>
 
-          <div class="transfer-box" data-transfer-box>
-            <div><strong>Titular:</strong> {site.shop.transfer.owner}</div>
-            <div><strong>Alias / CBU:</strong> a coordinar con Sole</div>
-            <div>Enviá el comprobante respondiendo el mail de confirmación.</div>
-          </div>
+          <label class="pay-option" style="margin:0.25rem 0 0.75rem;">
+            <input type="checkbox" name="paid" value="1" required data-paid />
+            <div>
+              <strong>Ya transferí el total</strong>
+              <span>Y voy a adjuntar el comprobante cuando se abra WhatsApp.</span>
+            </div>
+          </label>
 
-          <button class="btn btn-block" type="submit">Confirmar pedido</button>
-          <p class="form-note">Demo sin cobro real. El pedido se guarda en este navegador y se puede cablear a MP.</p>
+          <button class="btn btn-block" type="submit">Abrir WhatsApp</button>
         </form>
 
         <div class="form-success" data-checkout-success>
-          Listo. Guardamos tu pedido. Revisá el mail (o la descarga del resumen) para el siguiente paso de pago.
+          Pedido listo. En el chat de WhatsApp adjuntá el comprobante.
         </div>
       </section>
     </div>
   </main>
 </BaseLayout>
 
-<script define:vars={{ unit, tiers }}>
+<script define:vars={{ unit, tiers, formats, wa, transfer }}>
   window.__SOLEPH_PRICE__ = { unitPrice: unit, tiers };
+  window.__SOLEPH_FORMATS__ = formats;
+  window.__SOLEPH_WA__ = wa;
+  window.__SOLEPH_TRANSFER__ = transfer;
 </script>
 
 <script>
   import {
     getCart,
     removeFromCart,
+    setItemFormat,
     clearCart,
     formatARS,
+    formatLabel,
     priceForQuantity,
+    DEFAULT_FORMAT,
   } from '../../scripts/cart.js';
 
   const list = document.querySelector('[data-cart-page-list]');
@@ -98,8 +108,31 @@ const tiers = sample?.price_tiers ?? [];
   const tierEl = document.querySelector('[data-page-tier]');
   const form = document.querySelector('[data-checkout-form]');
   const ok = document.querySelector('[data-checkout-success]');
-  const transferBox = document.querySelector('[data-transfer-box]');
+  const paidCheck = document.querySelector('[data-paid]');
   const price = window.__SOLEPH_PRICE__ || { unitPrice: 5000, tiers: [] };
+  const formats = window.__SOLEPH_FORMATS__ || {
+    default: DEFAULT_FORMAT,
+    options: [
+      { id: 'redes', label: 'Para redes' },
+      { id: 'impresion', label: 'Para impresión' },
+    ],
+  };
+  const wa = window.__SOLEPH_WA__ || form?.getAttribute('data-wa') || '5492494550855';
+  const transfer = window.__SOLEPH_TRANSFER__ || {};
+
+  function formatSelect(item) {
+    const current = item.format || formats.default || DEFAULT_FORMAT;
+    const opts = (formats.options || [])
+      .map(
+        (opt) =>
+          `<option value="${opt.id}" ${opt.id === current ? 'selected' : ''}>${opt.label}</option>`
+      )
+      .join('');
+    return `<label class="format-field">
+      <span class="sr-only">Formato</span>
+      <select data-format="${item.id}" aria-label="Formato de ${item.id}">${opts}</select>
+    </label>`;
+  }
 
   function render() {
     const items = getCart();
@@ -118,7 +151,8 @@ const tiers = sample?.price_tiers ?? [];
 
     if (!list) return;
     if (!items.length) {
-      list.innerHTML = '<h2>Fotos elegidas</h2><div class="cart-empty">El carrito está vacío. <a href="/tienda">Ir a la tienda</a></div>';
+      list.innerHTML =
+        '<h2>Fotos elegidas</h2><div class="cart-empty">El carrito está vacío. <a href="/">Ir a la tienda</a></div>';
       return;
     }
 
@@ -127,11 +161,13 @@ const tiers = sample?.price_tiers ?? [];
       items
         .map(
           (item) => `
-      <div class="cart-item">
+      <div class="cart-item cart-item--format">
         <img src="${item.thumb || item.src}" alt="" width="72" height="72" />
         <div class="info">
           <strong>${item.albumName || 'Foto'}</strong>
           <span>${item.id}</span>
+          ${formatSelect(item)}
+          <span class="format-current">${formatLabel(item.format)}</span>
         </div>
         <button type="button" class="remove" data-remove="${item.id}">Quitar</button>
       </div>`
@@ -144,14 +180,14 @@ const tiers = sample?.price_tiers ?? [];
         if (id) removeFromCart(id);
       });
     });
-  }
 
-  form?.querySelectorAll('input[name="pay"]').forEach((r) => {
-    r.addEventListener('change', () => {
-      const val = form.querySelector('input[name="pay"]:checked')?.value;
-      transferBox?.classList.toggle('is-on', val === 'transferencia');
+    list.querySelectorAll('[data-format]').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        const id = sel.getAttribute('data-format');
+        if (id) setItemFormat(id, sel.value);
+      });
     });
-  });
+  }
 
   form?.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -160,30 +196,72 @@ const tiers = sample?.price_tiers ?? [];
       alert('El carrito está vacío.');
       return;
     }
+
     const fd = new FormData(form);
+    const name = String(fd.get('name') || '').trim();
+    const phone = String(fd.get('phone') || '').trim();
+    const paid = Boolean(paidCheck?.checked);
+
+    if (!name || !phone) {
+      alert('Completá nombre y WhatsApp.');
+      return;
+    }
+    if (!paid) {
+      alert('Confirmá que ya transferiste el total.');
+      return;
+    }
+
+    const total = priceForQuantity(items.length, price.unitPrice, price.tiers || []);
+    const orderId = 'ORD-' + Date.now().toString(36).toUpperCase();
+    const transferLine = [
+      transfer.owner || 'Sole Yaquinta',
+      transfer.alias ? `alias ${transfer.alias}` : null,
+      transfer.cbu ? transfer.cbu : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+
+    const lines = [
+      `Hola Sole, ya transferí y te mando el pedido de fotos.`,
+      ``,
+      `Pedido: ${orderId}`,
+      `Nombre: ${name}`,
+      `Mi WhatsApp: ${phone}`,
+      `Pago: Transferencia`,
+      `Total transferido: ${formatARS(total)}`,
+      transferLine ? `Datos usados: ${transferLine}` : null,
+      ``,
+      `Fotos:`,
+      ...items.map((item, i) => {
+        const fmt = formatLabel(item.format || DEFAULT_FORMAT);
+        return `${i + 1}. ${item.albumName || 'Álbum'} — ${item.id} — ${fmt}`;
+      }),
+      ``,
+      `Te adjunto el comprobante en este chat.`,
+      ``,
+      `Gracias!`,
+    ].filter((x) => x !== null);
+
     const order = {
-      id: 'ORD-' + Date.now().toString(36).toUpperCase(),
+      id: orderId,
       createdAt: new Date().toISOString(),
-      name: String(fd.get('name') || ''),
-      email: String(fd.get('email') || ''),
-      phone: String(fd.get('phone') || ''),
-      pay: String(fd.get('pay') || 'mercado_pago'),
-      items,
-      total: priceForQuantity(items.length, price.unitPrice, price.tiers || []),
+      name,
+      phone,
+      pay: 'transferencia',
+      items: items.map((item) => ({ ...item, format: item.format || DEFAULT_FORMAT })),
+      total,
       currency: 'ARS',
+      channel: 'whatsapp',
     };
     localStorage.setItem('soleph-last-order', JSON.stringify(order));
+
+    const url = `https://wa.me/${wa}?text=${encodeURIComponent(lines.join('\n'))}`;
+    window.open(url, '_blank', 'noopener');
+
     clearCart();
     form.style.display = 'none';
     ok?.classList.add('is-visible');
     render();
-
-    // optional: download JSON receipt
-    const blob = new Blob([JSON.stringify(order, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${order.id}.json`;
-    a.click();
   });
 
   window.addEventListener('soleph:cart', render);

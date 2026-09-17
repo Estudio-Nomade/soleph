@@ -5,4 +5,7 @@ export default defineConfig({
   site: 'https://soleyaquinta.com.ar',
   trailingSlash: 'never',
   compressHTML: true,
+  redirects: {
+    '/tienda': '/',
+  },
 });

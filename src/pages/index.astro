@@ -1,34 +1,120 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import site from '../data/site.json';
+
+const albums = site.shop.albums;
+const eventAlbums = albums.filter((a) => (a.kind || 'event') === 'event');
+const portfolioAlbums = albums.filter((a) => a.kind === 'portfolio');
+const currency = site.shop.currencySymbol;
 ---
 
-<BaseLayout title={site.brand.name} description={`${site.brand.name} — fotografía de naturaleza, deporte ecuestre y vida rural.`}>
-  <main class="page">
-    <header class="page-header">
-      <h1 class="sr-only">{site.brand.name}</h1>
-      <p>{site.brand.tagline}</p>
+<BaseLayout
+  title={`${site.brand.name} — Tienda`}
+  description="Comprá tus fotos de eventos. Buscá por selfie o llevate series del portafolio."
+>
+  <main class="page page--home">
+    <header class="home-hero">
+      <img class="home-logo" src="/images/logo.png" alt={site.brand.name} width="420" height="360" />
+      <p class="home-tag">{site.brand.tagline}</p>
+      <p class="home-lead">{site.shop.intro}</p>
+      <div class="home-cta">
+        <a class="btn" href="/tienda/buscar">Buscar mis fotos</a>
+        <a class="btn btn-ghost" href="#eventos">Ver álbumes</a>
+      </div>
     </header>
 
-    <section class="work-grid" aria-label="Proyectos">
+    <div class="shop-tools shop-tools--home">
+      <input type="search" placeholder="Buscar evento o serie..." data-album-filter aria-label="Buscar" />
+      <button type="button" class="btn btn-ghost" data-open-cart>Carrito</button>
+    </div>
+
+    <section class="shop-section shop-section--events" id="eventos" aria-labelledby="events-heading">
+      <div class="shop-section-head">
+        <h2 id="events-heading">{site.shop.events_title || 'Eventos'}</h2>
+        <p class="shop-section-note">Álbumes de cada fecha.</p>
+      </div>
+
       {
-        site.projects.map((project) => (
-          <a class="work-card" href={project.href}>
-            <img class="cover" src={project.cover} alt={project.title} loading="lazy" width="1200" height="900" />
-            <div class="meta">
-              <div class="title">{project.title}</div>
-              <div class="year">{project.year}</div>
-            </div>
-          </a>
-        ))
+        eventAlbums.length === 0 ? (
+          <div class="shop-empty" data-events-empty>
+            <p>{site.shop.events_empty}</p>
+          </div>
+        ) : (
+          <div class="album-grid" data-album-grid data-section="events">
+            {eventAlbums.map((album) => (
+              <a
+                class="album-card"
+                href={`/tienda/${album.id}`}
+                data-album-name={`${album.name} ${album.date_label || ''}`.toLowerCase()}
+              >
+                <img src={album.cover} alt={album.name} loading="lazy" width="1000" height="625" />
+                <div class="body">
+                  <h3>{album.name}</h3>
+                  <div class="meta">
+                    {album.date_label} · {album.photo_count || album.photos.length} fotos
+                  </div>
+                  <div class="price-pill">
+                    desde {currency}
+                    {album.photo_price.toLocaleString('es-AR')}
+                  </div>
+                </div>
+              </a>
+            ))}
+          </div>
+        )
       }
-      <a class="work-card" href="/sobre-mi">
-        <img class="cover" src="/images/covers/sobre-mi.jpg" alt="Sobre mi" loading="lazy" width="1200" height="900" />
-        <div class="meta">
-          <div class="title">Sobre mi</div>
-          <div class="year">2026</div>
-        </div>
-      </a>
+    </section>
+
+    <section class="shop-section shop-section--portfolio" aria-labelledby="portfolio-heading">
+      <div class="shop-section-head">
+        <h2 id="portfolio-heading">{site.shop.portfolio_title || 'Del portafolio'}</h2>
+        <p class="shop-section-note">{site.shop.portfolio_intro}</p>
+      </div>
+
+      <div class="album-grid album-grid--compact" data-album-grid data-section="portfolio">
+        {
+          portfolioAlbums.map((album) => (
+            <a
+              class="album-card album-card--compact"
+              href={`/tienda/${album.id}`}
+              data-album-name={`${album.name} ${album.date_label || ''}`.toLowerCase()}
+            >
+              <img src={album.cover} alt={album.name} loading="lazy" width="800" height="500" />
+              <div class="body">
+                <h3>{album.name}</h3>
+                <div class="meta">
+                  {album.date_label} · {album.photo_count || album.photos.length} fotos
+                </div>
+                <div class="price-pill">
+                  desde {currency}
+                  {album.photo_price.toLocaleString('es-AR')}
+                </div>
+              </div>
+            </a>
+          ))
+        }
+      </div>
     </section>
   </main>
 </BaseLayout>
+
+<script>
+  const input = document.querySelector('[data-album-filter]');
+  const cards = [...document.querySelectorAll('[data-album-name]')];
+  const empty = document.querySelector('[data-events-empty]');
+
+  input?.addEventListener('input', () => {
+    const q = String(input.value || '')
+      .trim()
+      .toLowerCase();
+    cards.forEach((card) => {
+      const name = card.getAttribute('data-album-name') || '';
+      card.style.display = !q || name.includes(q) ? '' : 'none';
+    });
+    if (empty) {
+      const eventCards = cards.filter((c) => c.closest('[data-section="events"]'));
+      const anyEventVisible = eventCards.some((c) => c.style.display !== 'none');
+      empty.style.display = eventCards.length === 0 || !q || anyEventVisible ? '' : 'none';
+    }
+  });
+</script>

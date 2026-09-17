@@ -1,0 +1,122 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Nuevo evento">
+  <div data-admin-new>
+    <div class="admin-head">
+      <div>
+        <h1>Nuevo evento</h1>
+        <p>Después vas a poder subir fotos y publicar.</p>
+      </div>
+      <div class="admin-actions">
+        <a class="admin-btn admin-btn--ghost" href="/admin">Volver</a>
+      </div>
+    </div>
+
+    <p class="admin-msg admin-msg--error" data-error hidden></p>
+
+    <div class="admin-card">
+      <form class="admin-form" data-form>
+        <label>
+          Nombre
+          <input name="name" required maxlength="120" placeholder="Ej. Prueba de riendas · marzo" />
+        </label>
+        <div class="admin-grid-2">
+          <label>
+            Slug (URL)
+            <input name="slug" required maxlength="80" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="prueba-riendas-marzo" />
+            <span class="admin-inline-note">Se completa solo; podés editarlo.</span>
+          </label>
+          <label>
+            Fecha (texto)
+            <input name="date_label" maxlength="80" placeholder="15 mar 2026" />
+          </label>
+        </div>
+        <div class="admin-grid-2">
+          <label>
+            Tipo
+            <select name="kind">
+              <option value="event" selected>Evento</option>
+              <option value="portfolio">Portafolio (también se vende)</option>
+            </select>
+          </label>
+          <label>
+            Precio por foto (ARS)
+            <input name="photo_price_ars" type="number" min="0" step="100" value="5000" required />
+          </label>
+        </div>
+        <label>
+          Mensaje corto al comprador
+          <textarea name="message" maxlength="500" placeholder="Opcional. Sale en el álbum."></textarea>
+        </label>
+        <label class="admin-check">
+          <input type="checkbox" name="search_by_face" checked />
+          Permitir “Buscar mis fotos” (cara) cuando esté conectado
+        </label>
+        <button class="admin-btn" type="submit" data-submit>Crear y seguir</button>
+      </form>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  import { requireAdminOrRedirect, slugify } from '../../../lib/admin-auth.js';
+  import { getSupabase } from '../../../lib/supabase.js';
+
+  const root = document.querySelector('[data-admin-new]');
+  const form = root?.querySelector('[data-form]');
+  const errEl = root?.querySelector('[data-error]');
+  const submitBtn = root?.querySelector('[data-submit]');
+  const nameInput = form?.querySelector('[name="name"]');
+  const slugInput = form?.querySelector('[name="slug"]');
+  let slugTouched = false;
+
+  function showError(msg) {
+    if (!errEl) return;
+    errEl.hidden = !msg;
+    errEl.textContent = msg || '';
+  }
+
+  slugInput?.addEventListener('input', () => {
+    slugTouched = true;
+  });
+  nameInput?.addEventListener('input', () => {
+    if (!slugTouched && slugInput) slugInput.value = slugify(nameInput.value);
+  });
+
+  await requireAdminOrRedirect();
+
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    showError('');
+    const fd = new FormData(form);
+    const name = String(fd.get('name') || '').trim();
+    const slug = slugify(String(fd.get('slug') || name));
+    const payload = {
+      name,
+      slug,
+      kind: String(fd.get('kind') || 'event') === 'portfolio' ? 'portfolio' : 'event',
+      date_label: String(fd.get('date_label') || '').trim() || null,
+      message: String(fd.get('message') || '').trim() || null,
+      photo_price_ars: Number(fd.get('photo_price_ars') || 0),
+      price_tiers: [],
+      search_by_face: fd.get('search_by_face') === 'on',
+      published: false,
+    };
+    if (!name) {
+      showError('Poné un nombre');
+      return;
+    }
+    submitBtn && (submitBtn.disabled = true);
+    try {
+      const sb = getSupabase();
+      const { data, error } = await sb.from('albums').insert(payload).select('id').single();
+      if (error) throw error;
+      window.location.assign(`/admin/evento/editar?id=${data.id}`);
+    } catch (err) {
+      showError(err?.message || 'No se pudo crear');
+      submitBtn && (submitBtn.disabled = false);
+    }
+  });
+</script>

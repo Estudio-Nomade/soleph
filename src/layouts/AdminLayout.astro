@@ -1,0 +1,57 @@
+---
+import '../styles/global.css';
+import '../styles/admin.css';
+
+interface Props {
+  title?: string;
+  bare?: boolean;
+}
+
+const { title = 'Admin', bare = false } = Astro.props;
+const fullTitle = `Soleph · ${title}`;
+---
+
+<!doctype html>
+<html lang="es-AR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <link rel="icon" type="image/png" href="/images/logo.png" />
+    <title>{fullTitle}</title>
+    <meta name="theme-color" content="#012B55" />
+  </head>
+  <body class:list={['admin-body', bare && 'admin-body--bare']}>
+    {
+      !bare && (
+        <header class="admin-top">
+          <a class="admin-brand" href="/admin">
+            <img src="/images/logo.png" alt="" width="36" height="36" />
+            <span>Admin Sole</span>
+          </a>
+          <nav class="admin-top-nav" data-admin-nav>
+            <a href="/admin">Eventos</a>
+            <a href="/admin/evento">Nuevo</a>
+            <a href="/" target="_blank" rel="noopener">Ver tienda</a>
+            <button type="button" class="admin-link-btn" data-admin-logout>
+              Salir
+            </button>
+          </nav>
+        </header>
+      )
+    }
+    <div class:list={['admin-shell', bare && 'admin-shell--bare']}>
+      <slot />
+    </div>
+    {
+      !bare && (
+        <script>
+          import { signOutAdmin } from '../lib/admin-auth.js';
+          document.querySelector('[data-admin-logout]')?.addEventListener('click', () => {
+            signOutAdmin();
+          });
+        </script>
+      )
+    }
+  </body>
+</html>

@@ -15,8 +15,9 @@ Español argentino, concreto, sin relleno ni tono corporate.
 - Marca visual: navy `#012B55`, hover `#546E87`, blanco, logo en `public/images/logo.png`.
 - No vaciar ni reemplazar `public/images` sin pedido explícito.
 - Tienda: precios base y tiers viven en `src/data/site.json` → `shop.albums[]`.
+- Cada álbum lleva `kind`: `"event"` (arriba, lo principal) o `"portfolio"` (abajo, más chico, también se vende). Sin `kind` se trata como evento.
 - Checkout demo puede guardar pedido en localStorage; no hardcodear keys de Mercado Pago en el front.
-- Reconocimiento facial: UX sí, motor real solo cuando haya API.
+- Reconocimiento facial: face-api 128-d + pgvector (estilo FullFoto). Admin `/admin/*`. Docs: `docs/face-search.md`.
 - Textos UI: humanos, cortos. Evitar “delve / landscape / seamless / unlock”.
 
 ## Configuración

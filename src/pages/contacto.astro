@@ -1,57 +1,69 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import site from '../data/site.json';
+
+const wa = site.brand.whatsapp_digits || '5492494550855';
 ---
 
 <BaseLayout title="Contacto" description={`Contacto — ${site.brand.name}`}>
   <main class="page">
     <header class="page-header">
       <h1>Contacto</h1>
-      <p>Contame sobre tu evento, tu caballo o el trabajo que tenés en mente.</p>
+      <p>Contame sobre tu evento, tu caballo o el trabajo que tenés en mente. Te respondo por WhatsApp.</p>
     </header>
 
-    <form class="contact-form" data-contact-form>
+    <form class="contact-form" data-contact-form data-wa={wa}>
       <div class="field">
         <label for="name">Nombre *</label>
         <input id="name" name="name" type="text" placeholder="Tu nombre..." required autocomplete="name" />
       </div>
       <div class="field">
-        <label for="email">Email *</label>
-        <input id="email" name="email" type="email" placeholder="Tu email..." required autocomplete="email" />
+        <label for="whatsapp">Tu WhatsApp</label>
+        <input
+          id="whatsapp"
+          name="whatsapp"
+          type="tel"
+          placeholder="Ej: 249 455 0855"
+          autocomplete="tel"
+          inputmode="tel"
+        />
       </div>
       <div class="field">
         <label for="message">Mensaje *</label>
         <textarea id="message" name="message" rows="6" placeholder="Tu mensaje..." required></textarea>
       </div>
-      <button class="btn btn-block" type="submit">Enviar</button>
-      <p class="form-note">Respuesta por mail. Si preferís WhatsApp, dejalo aclarado en el mensaje.</p>
+      <button class="btn btn-block" type="submit">Abrir WhatsApp</button>
     </form>
 
-    <div class="form-success" data-contact-success>Gracias. Te escribo pronto.</div>
+    <div class="form-success" data-contact-success>Listo. Se abrió el chat de WhatsApp.</div>
   </main>
 </BaseLayout>
 
 <script>
   const form = document.querySelector('[data-contact-form]');
   const ok = document.querySelector('[data-contact-success]');
+  const wa = form?.getAttribute('data-wa') || '5492494550855';
+
   form?.addEventListener('submit', (e) => {
     e.preventDefault();
     const data = new FormData(form);
     const name = String(data.get('name') || '').trim();
-    const email = String(data.get('email') || '').trim();
+    const whatsapp = String(data.get('whatsapp') || '').trim();
     const message = String(data.get('message') || '').trim();
-    if (!name || !email || !message) return;
+    if (!name || !message) return;
 
-    // Mailto fallback until a form backend is wired.
-    const subject = encodeURIComponent(`Consulta web — ${name}`);
-    const body = encodeURIComponent(`${message}\n\n— ${name}\n${email}`);
-    const mail = 'mailto:?subject=' + subject + '&body=' + body;
-    // Keep UX local: show thanks; user can still open mail client if configured.
+    const lines = [
+      `Hola Sole, te escribo desde la web.`,
+      ``,
+      `Nombre: ${name}`,
+      whatsapp ? `Mi WhatsApp: ${whatsapp}` : null,
+      ``,
+      message,
+    ].filter(Boolean);
+
+    const url = `https://wa.me/${wa}?text=${encodeURIComponent(lines.join('\n'))}`;
     form.style.display = 'none';
     ok?.classList.add('is-visible');
-    try {
-      // Prefer opening mail if the OS handles it; ignore failures.
-      window.location.href = mail;
-    } catch {}
+    window.open(url, '_blank', 'noopener');
   });
 </script>

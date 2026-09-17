@@ -1,79 +1,303 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import site from '../../data/site.json';
+
+const eventAlbums = site.shop.albums.filter((a) => (a.kind || 'event') === 'event');
+const allSellable = site.shop.albums;
+const options = eventAlbums.length ? eventAlbums : allSellable;
+const onlyEvents = eventAlbums.length > 0;
 ---
 
-<BaseLayout title="Buscar mis fotos" description="Encontrá tus fotos por selfie o por número de dorsal.">
+<BaseLayout title="Buscar mis fotos" description="Elegí el evento y encontrá tus fotos con un selfie.">
   <main class="page">
     <header class="page-header">
       <h1>Buscar mis fotos</h1>
-      <p>Elegí un evento y buscá por dorsal o por selfie, como en las tiendas de foto de competencia.</p>
+      <p>Elegí el evento y subí un selfie (o sacate una foto ahora). Te mostramos las que coinciden.</p>
     </header>
 
-    <section class="face-box">
-      <h2>1. Elegí el evento</h2>
-      <div class="shop-tools" style="justify-content:flex-start;">
-        <select data-event-select aria-label="Evento">
-          <option value="">Todos los eventos</option>
-          {
-            site.shop.albums.map((a) => (
-              <option value={a.id}>
-                {a.name} ({a.photos.length})
-              </option>
-            ))
-          }
-        </select>
-      </div>
-    </section>
+    <form class="face-search" data-face-search>
+      <section class="face-box">
+        <h2>1. Evento</h2>
+        <div class="shop-tools" style="justify-content:flex-start;">
+          <select data-event-select aria-label="Evento" required>
+            <option value="" disabled selected>Elegí un evento</option>
+            {
+              options.map((a) => (
+                <option value={a.id} data-source="json">
+                  {a.name}
+                  {a.date_label ? ` · ${a.date_label}` : ''}
+                </option>
+              ))
+            }
+          </select>
+        </div>
+        {
+          !onlyEvents && (
+            <p class="face-hint">
+              Todavía no hay fechas de evento publicadas. Mientras tanto podés probar con una serie del portafolio.
+            </p>
+          )
+        }
+        <p class="face-hint" data-live-hint hidden>
+          Eventos en vivo desde Supabase (con caras indexadas).
+        </p>
+      </section>
 
-    <section class="face-box">
-      <h2>2. Buscar por dorsal</h2>
-      <p>Si sabés el número, es lo más rápido.</p>
-      <div class="face-row">
-        <input type="text" inputmode="numeric" placeholder="Ej: 12" data-dorsal aria-label="Dorsal" />
-        <button type="button" class="btn" data-go-dorsal>Buscar</button>
-      </div>
-    </section>
+      <section class="face-box">
+        <h2>2. Tu selfie</h2>
+        <p class="face-hint">De frente, buena luz, sin anteojos oscuros si se puede.</p>
 
-    <section class="face-box">
-      <h2>3. Buscar por rostro</h2>
-      <p>Subí un selfie. Al continuar vas al álbum con el filtro de prueba activado.</p>
-      <div class="face-row">
-        <input type="file" accept="image/*" capture="user" data-selfie aria-label="Selfie" />
-        <button type="button" class="btn" data-go-face>Continuar</button>
-      </div>
-    </section>
+        <div class="selfie-actions">
+          <label class="btn">
+            Subir foto
+            <input type="file" accept="image/*" data-selfie-file class="sr-only" />
+          </label>
+          <label class="btn btn-ghost">
+            Sacar selfie
+            <input type="file" accept="image/*" capture="user" data-selfie-camera class="sr-only" />
+          </label>
+        </div>
 
-    <p class="form-note">
-      El reconocimiento facial real se conecta después (API propia o proveedor). Acá ya queda el flujo de UX y el carrito.
-    </p>
+        <div class="selfie-preview-wrap" data-selfie-wrap hidden>
+          <img class="selfie-preview-lg" data-selfie-preview alt="Tu selfie" />
+          <button type="button" class="btn btn-ghost" data-selfie-clear>Cambiar foto</button>
+        </div>
+      </section>
+
+      <button type="submit" class="btn btn-block" data-submit disabled>Buscar mis fotos</button>
+      <p class="form-note" data-status>
+        Match con AWS Rekognition (colección por evento). Elegí un evento en vivo y un selfie de frente.
+      </p>
+      <p class="form-note" data-error hidden style="color:#8a1f1f;"></p>
+    </form>
+
+    <section class="face-results" data-results hidden>
+      <header class="page-header" style="margin-top:1.5rem; padding-top:0;">
+        <h2 data-results-title>Resultados</h2>
+        <p data-results-sub></p>
+      </header>
+      <div class="photo-grid" data-results-grid></div>
+      <p class="face-hint" data-results-empty hidden>No encontramos coincidencias claras. Probá otra selfie con mejor luz.</p>
+    </section>
   </main>
 </BaseLayout>
 
 <script>
-  const select = document.querySelector('[data-event-select]');
-  const dorsal = document.querySelector('[data-dorsal]');
-  const selfie = document.querySelector('[data-selfie]');
+  import { isSupabaseConfigured, publicStorageUrl, BUCKETS } from '../../lib/supabase.js';
+  import { listSearchableAlbums, searchAlbumBySelfie } from '../../lib/face.js';
+  import { addToCart, isInCart, removeFromCart } from '../../scripts/cart.js';
 
-  function targetAlbum() {
-    const v = select?.value;
-    if (v) return `/tienda/${v}`;
-    // default first album
-    const first = select?.querySelector('option[value]:not([value=""])')?.getAttribute('value');
-    return first ? `/tienda/${first}` : '/tienda';
+  const form = document.querySelector('[data-face-search]');
+  const select = document.querySelector('[data-event-select]');
+  const fileInput = document.querySelector('[data-selfie-file]');
+  const camInput = document.querySelector('[data-selfie-camera]');
+  const preview = document.querySelector('[data-selfie-preview]');
+  const wrap = document.querySelector('[data-selfie-wrap]');
+  const clearBtn = document.querySelector('[data-selfie-clear]');
+  const submit = document.querySelector('[data-submit]');
+  const statusEl = document.querySelector('[data-status]');
+  const errorEl = document.querySelector('[data-error]');
+  const liveHint = document.querySelector('[data-live-hint]');
+  const results = document.querySelector('[data-results]');
+  const resultsGrid = document.querySelector('[data-results-grid]');
+  const resultsTitle = document.querySelector('[data-results-title]');
+  const resultsSub = document.querySelector('[data-results-sub]');
+  const resultsEmpty = document.querySelector('[data-results-empty]');
+
+  /** @type {File | null} */
+  let selfieFile = null;
+  let objectUrl = '';
+  /** @type {Record<string, any>} */
+  let liveAlbums = {};
+
+  function showError(msg) {
+    if (!errorEl) return;
+    errorEl.hidden = !msg;
+    errorEl.textContent = msg || '';
   }
 
-  document.querySelector('[data-go-dorsal]')?.addEventListener('click', () => {
-    const q = encodeURIComponent(String(dorsal?.value || '').trim());
-    const base = targetAlbum();
-    window.location.href = q ? `${base}?q=${q}` : base;
+  function setStatus(msg) {
+    if (statusEl) statusEl.textContent = msg;
+  }
+
+  function hasEvent() {
+    return Boolean(select?.value);
+  }
+
+  function hasSelfie() {
+    return Boolean(selfieFile);
+  }
+
+  function sync() {
+    if (submit) submit.disabled = !(hasEvent() && hasSelfie());
+  }
+
+  function setSelfie(file) {
+    if (!file || !preview || !wrap) return;
+    selfieFile = file;
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    objectUrl = URL.createObjectURL(file);
+    preview.src = objectUrl;
+    wrap.hidden = false;
+    showError('');
+    sync();
+  }
+
+  function clearSelfie() {
+    selfieFile = null;
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    objectUrl = '';
+    if (preview) preview.removeAttribute('src');
+    if (wrap) wrap.hidden = true;
+    if (fileInput) fileInput.value = '';
+    if (camInput) camInput.value = '';
+    sync();
+  }
+
+  function selectedIsLive() {
+    const opt = select?.selectedOptions?.[0];
+    return opt?.getAttribute('data-source') === 'live';
+  }
+
+  function renderMatches(matches, albumMeta) {
+    if (!results || !resultsGrid) return;
+    results.hidden = false;
+    resultsGrid.innerHTML = '';
+    const n = matches.length;
+    if (resultsTitle) resultsTitle.textContent = n ? `Tus fotos · ${n}` : 'Sin coincidencias';
+    if (resultsSub) {
+      resultsSub.textContent = albumMeta
+        ? `${albumMeta.name}${albumMeta.date_label ? ` · ${albumMeta.date_label}` : ''}`
+        : '';
+    }
+    if (resultsEmpty) resultsEmpty.hidden = n > 0;
+    if (!n) return;
+
+    const unit = albumMeta?.photo_price_ars || 5000;
+    for (const m of matches) {
+      const src = m.previewUrl || publicStorageUrl(BUCKETS.previews, m.previewPath);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'photo-tile';
+      btn.dataset.photo = '';
+      btn.dataset.id = m.photoId;
+      btn.dataset.src = src;
+      btn.dataset.thumb = src;
+      btn.dataset.albumId = albumMeta?.id || select.value;
+      btn.dataset.albumName = albumMeta?.name || '';
+      btn.dataset.unit = String(unit);
+      btn.innerHTML = `
+        <img src="${src}" alt="" loading="lazy" width="600" height="600" />
+        <span class="wm" aria-hidden="true">SOLE YAQUINTA</span>
+        <span class="add" data-add>Agregar</span>
+      `;
+      btn.addEventListener('click', () => {
+        const id = m.photoId;
+        if (isInCart(id)) removeFromCart(id);
+        else {
+          addToCart({
+            id,
+            src,
+            thumb: src,
+            albumId: albumMeta?.id || select.value,
+            albumName: albumMeta?.name || '',
+            unitPrice: unit,
+          });
+        }
+        const on = isInCart(id);
+        btn.classList.toggle('is-selected', on);
+        const label = btn.querySelector('[data-add]');
+        if (label) label.textContent = on ? 'En carrito' : 'Agregar';
+      });
+      if (isInCart(m.photoId)) {
+        btn.classList.add('is-selected');
+        const label = btn.querySelector('[data-add]');
+        if (label) label.textContent = 'En carrito';
+      }
+      resultsGrid.appendChild(btn);
+    }
+  }
+
+  async function hydrateLiveAlbums() {
+    if (!isSupabaseConfigured() || !select) return;
+    try {
+      const albums = await listSearchableAlbums();
+      if (!albums.length) return;
+      liveHint && (liveHint.hidden = false);
+      // prepend live albums
+      const placeholder = select.querySelector('option[value=""]');
+      for (const a of albums) {
+        liveAlbums[a.id] = a;
+        if ([...select.options].some((o) => o.value === a.id && o.getAttribute('data-source') === 'live')) continue;
+        const opt = document.createElement('option');
+        opt.value = a.id;
+        opt.setAttribute('data-source', 'live');
+        opt.textContent = `${a.name}${a.date_label ? ` · ${a.date_label}` : ''} · en vivo`;
+        if (placeholder && placeholder.nextSibling) select.insertBefore(opt, placeholder.nextSibling);
+        else select.appendChild(opt);
+      }
+    } catch (err) {
+      console.warn('live albums', err);
+    }
+  }
+
+  select?.addEventListener('change', sync);
+  fileInput?.addEventListener('change', () => setSelfie(fileInput.files?.[0]));
+  camInput?.addEventListener('change', () => setSelfie(camInput.files?.[0]));
+  clearBtn?.addEventListener('click', clearSelfie);
+
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!hasEvent() || !hasSelfie() || !selfieFile) return;
+    showError('');
+
+    // JSON demo albums: keep old demo path
+    if (!selectedIsLive()) {
+      const id = select.value;
+      sessionStorage.setItem('soleph-face-demo', '1');
+      window.location.href = `/tienda/${id}?face=1`;
+      return;
+    }
+
+    if (!isSupabaseConfigured()) {
+      showError('Supabase no está configurado.');
+      return;
+    }
+
+    submit && (submit.disabled = true);
+    setStatus('Buscando con Rekognition…');
+    try {
+      const albumId = select.value;
+      const { photoIds, matches, noFace } = await searchAlbumBySelfie({
+        albumId,
+        selfie: selfieFile,
+      });
+      if (noFace) {
+        showError('No detectamos una cara en el selfie. Probá de frente y con buena luz.');
+        setStatus('Sin cara detectada.');
+        return;
+      }
+      const meta = liveAlbums[albumId] || { id: albumId, name: select.selectedOptions[0]?.textContent || '' };
+      if (meta && !meta.photo_price_ars) meta.photo_price_ars = 5000;
+      renderMatches(matches, meta);
+      setStatus(
+        photoIds.length
+          ? `Listo: ${photoIds.length} foto(s) (Rekognition). Podés agregarlas al carrito.`
+          : 'Búsqueda lista. No hubo match por encima del umbral.',
+      );
+    } catch (err) {
+      console.error(err);
+      showError(err?.message || 'No se pudo buscar');
+      setStatus('Error en la búsqueda.');
+    } finally {
+      sync();
+    }
   });
 
-  document.querySelector('[data-go-face]')?.addEventListener('click', () => {
-    // stash a flag; album page can read it. Selfie itself can't persist easily without server.
-    sessionStorage.setItem('soleph-face-demo', '1');
-    window.location.href = targetAlbum();
-  });
+  // warmup model in background (optional)
+  if (isSupabaseConfigured()) {
+    hydrateLiveAlbums();
+  }
 
-  // if arriving with ?q= on album pages is handled there; here just UX
+  sync();
 </script>
