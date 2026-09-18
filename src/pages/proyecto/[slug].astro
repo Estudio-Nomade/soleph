@@ -24,7 +24,16 @@ const related = site.projects.filter((p) => p.slug !== project.slug).slice(0, 3)
       {
         project.images.map((src, i) => (
           <figure data-full={src} class={i >= 3 && i % 4 === 0 ? 'wide' : undefined}>
-            <img src={src} alt={`${project.title} ${i + 1}`} loading={i < 2 ? 'eager' : 'lazy'} width="1600" height="1200" />
+            <img
+              src={src}
+              alt={`${project.title} ${i + 1}`}
+              loading={i < 2 ? 'eager' : 'lazy'}
+              decoding="async"
+              fetchpriority={i === 0 ? 'high' : 'auto'}
+              width="1600"
+              height="1200"
+              sizes="(min-width: 933px) 48vw, 100vw"
+            />
           </figure>
         ))
       }
@@ -37,7 +46,15 @@ const related = site.projects.filter((p) => p.slug !== project.slug).slice(0, 3)
           <div class="related-grid">
             {related.map((p) => (
               <a class="related-card" href={p.href}>
-                <img src={p.cover} alt={p.title} loading="lazy" width="800" height="600" />
+                <img
+                  src={p.cover}
+                  alt={p.title}
+                  loading="lazy"
+                  decoding="async"
+                  width="800"
+                  height="600"
+                  sizes="(min-width: 933px) 30vw, 100vw"
+                />
                 <div class="label">
                   <strong>{p.title}</strong>
                   <span>{p.year}</span>
