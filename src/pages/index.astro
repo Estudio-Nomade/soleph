@@ -14,7 +14,22 @@ const currency = site.shop.currencySymbol;
 >
   <main class="page page--home">
     <header class="home-hero">
-      <img class="home-logo" src="/images/logo.png" alt={site.brand.name} width="420" height="360" />
+      <div class="home-hero-visual">
+        <img
+          class="home-hero-mark"
+          src="/images/logosinfondo.jpg"
+          alt={site.brand.name}
+          width="688"
+          height="688"
+        />
+        <img
+          class="home-hero-cover"
+          src="/images/fotoportada.jpg"
+          alt=""
+          width="1280"
+          height="853"
+        />
+      </div>
       <p class="home-tag">{site.brand.tagline}</p>
       <p class="home-lead">{site.shop.intro}</p>
       <div class="home-cta">
