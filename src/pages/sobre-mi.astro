@@ -8,10 +8,11 @@ const wa = site.brand.whatsapp_digits || '5492494550855';
 ---
 
 <BaseLayout title="Sobre mí" description={lead} ogImage={site.about.image}>
-  <main class="page page--about">
+  <main class="page page--about" data-about-page>
     <section class="about-hero">
       <div class="about-photo">
         <img
+          data-about-image
           src={site.about.image}
           alt={site.brand.name}
           width="933"
@@ -25,10 +26,10 @@ const wa = site.brand.whatsapp_digits || '5492494550855';
 
       <div class="about-copy-col">
         <p class="about-kicker">{site.brand.tagline}</p>
-        <h1>Sobre mí</h1>
+        <h1 data-about-title>Sobre mí</h1>
         <p class="about-place">{site.brand.location}</p>
 
-        <div class="about-body">
+        <div class="about-body" data-about-body>
           {paragraphs.map((p) => <p>{p}</p>)}
         </div>
 
@@ -41,10 +42,10 @@ const wa = site.brand.whatsapp_digits || '5492494550855';
 
     <section class="related about-related">
       <h2>También te puede interesar</h2>
-      <div class="related-grid">
+      <div class="related-grid" data-about-related>
         {
           site.projects.slice(0, 3).map((p) => (
-            <a class="related-card" href={p.href}>
+            <a class="related-card" href={`/proyecto/ver?slug=${p.slug}`}>
               <img
                 src={p.cover}
                 alt={p.title}
@@ -65,3 +66,57 @@ const wa = site.brand.whatsapp_digits || '5492494550855';
     </section>
   </main>
 </BaseLayout>
+
+<script define:vars={{ siteSeed: site }}>
+  window.__SOLEPH_SITE_SEED__ = siteSeed;
+</script>
+
+<script>
+  import {
+    loadPortfolioContent,
+    portfolioFallbackFromSite,
+  } from '../lib/portfolio.js';
+
+  function escapeHtml(s) {
+    return String(s)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
+  }
+
+  async function hydrate() {
+    try {
+      const seed = portfolioFallbackFromSite(window.__SOLEPH_SITE_SEED__ || {});
+      const content = await loadPortfolioContent(seed);
+      const img = document.querySelector('[data-about-image]');
+      const title = document.querySelector('[data-about-title]');
+      const body = document.querySelector('[data-about-body]');
+      const related = document.querySelector('[data-about-related]');
+      if (img && content.about.image) img.src = content.about.image;
+      if (title && content.about.title) title.textContent = content.about.title;
+      if (body && content.about.body) {
+        const parts = content.about.body.split(/\n+/).filter(Boolean);
+        body.innerHTML = parts.map((p) => `<p>${escapeHtml(p)}</p>`).join('');
+      }
+      if (related && content.projects?.length) {
+        related.innerHTML = content.projects
+          .slice(0, 3)
+          .map(
+            (p) => `
+          <a class="related-card" href="/proyecto/ver?slug=${encodeURIComponent(p.slug)}">
+            <img src="${escapeHtml(p.cover)}" alt="${escapeHtml(p.title)}" loading="lazy" width="800" height="600" />
+            <div class="label"><strong>${escapeHtml(p.title)}</strong><span>${escapeHtml(
+              String(p.year || ''),
+            )}</span></div>
+          </a>`,
+          )
+          .join('');
+      }
+    } catch (err) {
+      console.warn('about live', err);
+    }
+  }
+
+  hydrate();
+</script>

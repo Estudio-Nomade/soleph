@@ -633,3 +633,53 @@
     align-items: stretch;
   }
 }
+
+/* Portafolio admin */
+.admin-thumb-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+.admin-thumb-row img {
+  width: 120px;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #eef1f4;
+  border: 1px solid #d7dee6;
+}
+.admin-pf-project {
+  margin-top: 0.85rem;
+}
+.admin-pf-gallery {
+  margin-top: 0.85rem;
+}
+.admin-pf-gallery-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+.admin-pf-imgs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.55rem;
+}
+.admin-pf-img {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  background: #f7f9fb;
+  border: 1px solid #e2e8ef;
+  border-radius: 6px;
+  padding: 0.4rem;
+}
+.admin-pf-img img {
+  width: 100%;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+  border-radius: 4px;
+}

@@ -1,19 +1,47 @@
 /**
- * Genera preview con marca de agua en el browser (sin backend).
+ * Preview con marca de agua del logo (browser, sin backend).
  * Original se sube aparte al bucket privado.
  */
 
-const DEFAULT_MARK = 'SOLE YAQUINTA';
+const LOGO_SRC = '/images/logosinfondo.png';
+const LOGO_FALLBACK = '/images/logo.png';
+
+/** @type {HTMLImageElement | null} */
+let logoCache = null;
+/** @type {Promise<HTMLImageElement> | null} */
+let logoPromise = null;
+
+/**
+ * @param {string} src
+ * @returns {Promise<HTMLImageElement>}
+ */
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const el = new Image();
+    el.decoding = 'async';
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error(`No se pudo cargar ${src}`));
+    el.src = src;
+  });
+}
+
+async function getLogoImage() {
+  if (logoCache) return logoCache;
+  if (!logoPromise) {
+    logoPromise = loadImage(LOGO_SRC).catch(() => loadImage(LOGO_FALLBACK));
+  }
+  logoCache = await logoPromise;
+  return logoCache;
+}
 
 /**
  * @param {File|Blob} file
- * @param {{ maxEdge?: number, quality?: number, mark?: string }} [opts]
+ * @param {{ maxEdge?: number, quality?: number, logoSrc?: string }} [opts]
  * @returns {Promise<{ previewBlob: Blob, width: number, height: number, originalFile: File|Blob }>}
  */
 export async function makeWatermarkedPreview(file, opts = {}) {
   const maxEdge = opts.maxEdge ?? 1600;
   const quality = opts.quality ?? 0.82;
-  const mark = opts.mark ?? DEFAULT_MARK;
 
   const bitmap = await loadBitmap(file);
   const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
@@ -30,37 +58,54 @@ export async function makeWatermarkedPreview(file, opts = {}) {
   ctx.drawImage(source, 0, 0, width, height);
   if ('close' in bitmap && typeof bitmap.close === 'function') bitmap.close();
 
-  // diagonal soft watermark
-  ctx.save();
-  ctx.translate(width / 2, height / 2);
-  ctx.rotate((-28 * Math.PI) / 180);
-  const fontSize = Math.max(18, Math.round(Math.min(width, height) * 0.045));
-  ctx.font = `600 ${fontSize}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.lineWidth = Math.max(1, fontSize * 0.04);
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-  ctx.fillStyle = 'rgba(1, 43, 85, 0.38)';
-  const stepY = fontSize * 3.2;
-  const stepX = Math.max(width, height);
-  for (let y = -height; y <= height; y += stepY) {
-    ctx.strokeText(mark, 0, y);
-    ctx.fillText(mark, 0, y);
-  }
-  // corner mark
-  ctx.restore();
-  ctx.font = `600 ${Math.max(12, Math.round(fontSize * 0.55))}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  ctx.strokeStyle = 'rgba(1,43,85,0.55)';
-  ctx.lineWidth = 2;
-  const pad = Math.round(Math.min(width, height) * 0.03);
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'bottom';
-  ctx.strokeText(mark, width - pad, height - pad);
-  ctx.fillText(mark, width - pad, height - pad);
+  const logo = await getLogoImage();
+  drawLogoWatermark(ctx, logo, width, height);
 
   const previewBlob = await canvasToJpeg(canvas, quality);
   return { previewBlob, width, height, originalFile: file };
+}
+
+/**
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {HTMLImageElement} logo
+ * @param {number} width
+ * @param {number} height
+ */
+function drawLogoWatermark(ctx, logo, width, height) {
+  const lw = logo.naturalWidth || logo.width || 1;
+  const lh = logo.naturalHeight || logo.height || 1;
+  const aspect = lw / lh;
+
+  // tile diagonal (marca repetida)
+  const tileW = Math.max(90, Math.round(Math.min(width, height) * 0.22));
+  const tileH = Math.max(28, Math.round(tileW / aspect));
+  const gapY = tileH * 2.4;
+  const gapX = tileW * 1.35;
+
+  ctx.save();
+  ctx.translate(width / 2, height / 2);
+  ctx.rotate((-28 * Math.PI) / 180);
+  ctx.globalAlpha = 0.16;
+  const extent = Math.max(width, height) * 1.35;
+  for (let y = -extent; y <= extent; y += gapY) {
+    for (let x = -extent; x <= extent; x += gapX) {
+      ctx.drawImage(logo, x - tileW / 2, y - tileH / 2, tileW, tileH);
+    }
+  }
+  ctx.restore();
+
+  // logo esquina inferior derecha
+  const cornerW = Math.max(72, Math.round(Math.min(width, height) * 0.16));
+  const cornerH = Math.max(22, Math.round(cornerW / aspect));
+  const pad = Math.round(Math.min(width, height) * 0.03);
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  // soft shadow plate
+  ctx.shadowColor = 'rgba(0,0,0,0.35)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetY = 2;
+  ctx.drawImage(logo, width - pad - cornerW, height - pad - cornerH, cornerW, cornerH);
+  ctx.restore();
 }
 
 /**
@@ -85,13 +130,10 @@ async function loadBitmap(file) {
     return {
       width: img.naturalWidth || img.width,
       height: img.naturalHeight || img.height,
-      // canvas drawImage accepts HTMLImageElement
       _img: img,
       close() {},
     };
   } finally {
-    // keep object URL until draw; revoke after drawImage via caller close no-op
-    // actual revoke:
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 }

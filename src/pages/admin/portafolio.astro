@@ -1,0 +1,349 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import site from '../../data/site.json';
+---
+
+<AdminLayout title="Portafolio">
+  <div data-admin-portfolio>
+    <div class="admin-head">
+      <div>
+        <h1>Portafolio y Sobre mí</h1>
+        <p>Textos y fotos de Trabajos / proyectos / Sobre mí. Se publican al guardar (sin redeploy).</p>
+      </div>
+      <div class="admin-actions">
+        <a class="admin-btn admin-btn--ghost" href="/admin">Volver</a>
+        <button type="button" class="admin-btn" data-save>Guardar todo</button>
+      </div>
+    </div>
+
+    <p class="admin-msg admin-msg--error" data-error hidden></p>
+    <p class="admin-msg admin-msg--ok" data-ok hidden></p>
+    <p class="admin-msg admin-msg--info" data-loading>Cargando…</p>
+
+    <div data-ready hidden>
+      <div class="admin-card">
+        <h2 class="admin-section-title">Sobre mí</h2>
+        <form class="admin-form" data-about-form onsubmit="return false">
+          <label>
+            Título
+            <input name="title" maxlength="80" />
+          </label>
+          <label>
+            Texto (un párrafo por línea)
+            <textarea name="body" rows="8" maxlength="4000"></textarea>
+          </label>
+          <div class="admin-grid-2" style="align-items:end">
+            <label>
+              Foto actual
+              <div class="admin-thumb-row">
+                <img data-about-preview alt="" width="160" height="200" />
+              </div>
+            </label>
+            <label>
+              Cambiar foto
+              <input type="file" accept="image/*" data-about-file />
+            </label>
+          </div>
+        </form>
+      </div>
+
+      <div class="admin-card">
+        <div class="admin-head" style="margin-bottom:0.5rem; padding:0">
+          <h2 class="admin-section-title" style="margin:0">Proyectos (Trabajos)</h2>
+          <button type="button" class="admin-btn admin-btn--ghost" data-add-project>Agregar proyecto</button>
+        </div>
+        <p class="admin-muted" style="margin-top:0">
+          Cover + galería. Las fotos se suben a Supabase y quedan públicas en la web.
+        </p>
+        <label style="display:block; margin-bottom:1rem">
+          Intro de la página Trabajos
+          <input data-trabajos-intro maxlength="200" placeholder="Selección de proyectos y series." />
+        </label>
+        <div data-projects></div>
+      </div>
+
+      <div class="admin-sticky-bar">
+        <p class="admin-muted" style="margin:0">Cambios visibles en /trabajos, /sobre-mi y /proyecto/…</p>
+        <button type="button" class="admin-btn" data-save-bottom>Guardar todo</button>
+      </div>
+    </div>
+  </div>
+</AdminLayout>
+
+<script define:vars={{ siteSeed: site }}>
+  window.__SOLEPH_SITE_SEED__ = siteSeed;
+</script>
+
+<script>
+  import { requireAdminOrRedirect, slugify } from '../../lib/admin-auth.js';
+  import {
+    loadPortfolioContent,
+    normalizePortfolio,
+    normalizeProject,
+    portfolioFallbackFromSite,
+    uploadPortfolioImage,
+    PORTFOLIO_SETTINGS_KEY,
+  } from '../../lib/portfolio.js';
+  import { getSupabase } from '../../lib/supabase.js';
+
+  const root = document.querySelector('[data-admin-portfolio]');
+  const errEl = root?.querySelector('[data-error]');
+  const okEl = root?.querySelector('[data-ok]');
+  const loadingEl = root?.querySelector('[data-loading]');
+  const readyEl = root?.querySelector('[data-ready]');
+  const aboutForm = root?.querySelector('[data-about-form]');
+  const aboutPreview = root?.querySelector('[data-about-preview]');
+  const aboutFile = root?.querySelector('[data-about-file]');
+  const projectsEl = root?.querySelector('[data-projects]');
+  const introInput = root?.querySelector('[data-trabajos-intro]');
+  const saveBtns = [...(root?.querySelectorAll('[data-save], [data-save-bottom]') || [])];
+
+  /** @type {any} */
+  let content = null;
+  let busy = false;
+
+  function showError(msg) {
+    if (!errEl) return;
+    errEl.hidden = !msg;
+    errEl.textContent = msg || '';
+    if (msg) window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  function showOk(msg) {
+    if (!okEl) return;
+    okEl.hidden = !msg;
+    okEl.textContent = msg || '';
+  }
+  function escapeHtml(s) {
+    return String(s)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
+  }
+
+  function fillAbout() {
+    if (!aboutForm || !content) return;
+    aboutForm.title.value = content.about.title || '';
+    aboutForm.body.value = content.about.body || '';
+    if (aboutPreview) {
+      aboutPreview.src = content.about.image || '/images/sobre-mi.jpg';
+    }
+    if (introInput) introInput.value = content.trabajos_intro || '';
+  }
+
+  function projectCard(p, idx) {
+    const images = (p.images || [])
+      .map(
+        (src, i) => `
+      <div class="admin-pf-img" data-img-i="${i}">
+        <img src="${escapeHtml(src)}" alt="" loading="lazy" />
+        <button type="button" class="admin-btn admin-btn--ghost" data-rm-img data-i="${i}">Quitar</button>
+      </div>`,
+      )
+      .join('');
+    return `
+    <article class="admin-card admin-pf-project" data-project-idx="${idx}">
+      <div class="admin-grid-2">
+        <label>Título
+          <input data-f="title" value="${escapeHtml(p.title || '')}" maxlength="120" />
+        </label>
+        <label>Slug (URL)
+          <input data-f="slug" value="${escapeHtml(p.slug || '')}" maxlength="80" />
+        </label>
+        <label>Año
+          <input data-f="year" type="number" value="${escapeHtml(String(p.year || ''))}" />
+        </label>
+        <label>Cover
+          <div class="admin-thumb-row">
+            <img src="${escapeHtml(p.cover || '')}" alt="" data-cover-img width="120" height="90" />
+            <input type="file" accept="image/*" data-cover-file />
+          </div>
+        </label>
+      </div>
+      <div class="admin-pf-gallery">
+        <div class="admin-pf-gallery-head">
+          <strong>Fotos del proyecto</strong>
+          <label class="admin-btn admin-btn--ghost" style="margin:0">
+            Sumar fotos
+            <input type="file" accept="image/*" multiple data-add-imgs class="sr-only" />
+          </label>
+        </div>
+        <div class="admin-pf-imgs" data-imgs>${images || '<p class="admin-muted">Todavía no hay fotos.</p>'}</div>
+      </div>
+      <div class="admin-actions" style="margin-top:0.75rem">
+        <button type="button" class="admin-btn admin-btn--danger" data-rm-project>Borrar proyecto</button>
+      </div>
+    </article>`;
+  }
+
+  function renderProjects() {
+    if (!projectsEl || !content) return;
+    if (!content.projects.length) {
+      projectsEl.innerHTML = '<p class="admin-empty">No hay proyectos. Agregá el primero.</p>';
+      return;
+    }
+    projectsEl.innerHTML = content.projects.map((p, i) => projectCard(p, i)).join('');
+    bindProjectCards();
+  }
+
+  function readProjectFields(card) {
+    const idx = Number(card.getAttribute('data-project-idx'));
+    const p = content.projects[idx];
+    if (!p) return;
+    const title = card.querySelector('[data-f="title"]')?.value?.trim() || '';
+    let slug = card.querySelector('[data-f="slug"]')?.value?.trim() || '';
+    if (!slug && title) slug = slugify(title);
+    p.title = title;
+    p.slug = slugify(slug || title);
+    p.year = Number(card.querySelector('[data-f="year"]')?.value) || new Date().getFullYear();
+    p.href = `/proyecto/${p.slug}`;
+  }
+
+  function syncAllFields() {
+    if (!content) return;
+    if (aboutForm) {
+      content.about.title = aboutForm.title.value.trim() || 'Sobre mí';
+      content.about.body = aboutForm.body.value.trim();
+    }
+    if (introInput) content.trabajos_intro = introInput.value.trim();
+    projectsEl?.querySelectorAll('[data-project-idx]').forEach((card) => readProjectFields(card));
+  }
+
+  function bindProjectCards() {
+    projectsEl?.querySelectorAll('[data-project-idx]').forEach((card) => {
+      const idx = Number(card.getAttribute('data-project-idx'));
+      card.querySelector('[data-cover-file]')?.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+          showError('');
+          const url = await uploadPortfolioImage(file, content.projects[idx]?.slug || 'cover');
+          content.projects[idx].cover = url;
+          if (!content.projects[idx].images?.length) content.projects[idx].images = [url];
+          const img = card.querySelector('[data-cover-img]');
+          if (img) img.src = url;
+          showOk('Cover subido');
+        } catch (err) {
+          showError(err?.message || 'No se pudo subir el cover');
+        }
+      });
+      card.querySelector('[data-add-imgs]')?.addEventListener('change', async (e) => {
+        const files = [...(e.target.files || [])];
+        if (!files.length) return;
+        try {
+          showError('');
+          const slug = content.projects[idx]?.slug || 'proj';
+          for (const f of files) {
+            const url = await uploadPortfolioImage(f, slug);
+            content.projects[idx].images = content.projects[idx].images || [];
+            content.projects[idx].images.push(url);
+            if (!content.projects[idx].cover) content.projects[idx].cover = url;
+          }
+          e.target.value = '';
+          renderProjects();
+          showOk(`${files.length} foto(s) sumadas`);
+        } catch (err) {
+          showError(err?.message || 'No se pudieron subir las fotos');
+        }
+      });
+      card.querySelectorAll('[data-rm-img]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const i = Number(btn.getAttribute('data-i'));
+          content.projects[idx].images.splice(i, 1);
+          renderProjects();
+        });
+      });
+      card.querySelector('[data-rm-project]')?.addEventListener('click', () => {
+        if (!confirm('¿Borrar este proyecto del portafolio?')) return;
+        content.projects.splice(idx, 1);
+        renderProjects();
+      });
+    });
+  }
+
+  aboutFile?.addEventListener('change', async () => {
+    const file = aboutFile.files?.[0];
+    if (!file) return;
+    try {
+      showError('');
+      const url = await uploadPortfolioImage(file, 'about');
+      content.about.image = url;
+      if (aboutPreview) aboutPreview.src = url;
+      showOk('Foto de Sobre mí subida');
+    } catch (err) {
+      showError(err?.message || 'No se pudo subir la foto');
+    }
+  });
+
+  root?.querySelector('[data-add-project]')?.addEventListener('click', () => {
+    syncAllFields();
+    content.projects.push(
+      normalizeProject({
+        slug: `serie-${content.projects.length + 1}`,
+        title: 'Nueva serie',
+        year: new Date().getFullYear(),
+        cover: '/images/logo.png',
+        images: [],
+      }),
+    );
+    renderProjects();
+  });
+
+  async function save() {
+    if (busy || !content) return;
+    showError('');
+    showOk('');
+    syncAllFields();
+    const payload = normalizePortfolio(content, content);
+    if (!payload.about.body.trim()) {
+      showError('Completá el texto de Sobre mí');
+      return;
+    }
+    for (const p of payload.projects) {
+      if (!p.title || !p.slug) {
+        showError('Cada proyecto necesita título y slug');
+        return;
+      }
+    }
+    busy = true;
+    saveBtns.forEach((b) => (b.disabled = true));
+    try {
+      const sb = getSupabase();
+      const { error } = await sb.from('settings').upsert({
+        key: PORTFOLIO_SETTINGS_KEY,
+        value: payload,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+      content = payload;
+      fillAbout();
+      renderProjects();
+      showOk('Portafolio guardado · ya se ve en la web (hard refresh si hace falta)');
+    } catch (err) {
+      showError(err?.message || 'No se pudo guardar');
+    } finally {
+      busy = false;
+      saveBtns.forEach((b) => (b.disabled = false));
+    }
+  }
+
+  saveBtns.forEach((b) => b.addEventListener('click', save));
+
+  async function load() {
+    const gate = await requireAdminOrRedirect();
+    if (!gate) return;
+    try {
+      const seed = portfolioFallbackFromSite(window.__SOLEPH_SITE_SEED__ || {});
+      content = await loadPortfolioContent(seed);
+      fillAbout();
+      renderProjects();
+      loadingEl && (loadingEl.hidden = true);
+      readyEl && (readyEl.hidden = false);
+    } catch (err) {
+      loadingEl && (loadingEl.hidden = true);
+      showError(err?.message || 'No se pudo cargar el portafolio');
+    }
+  }
+
+  load();
+</script>
