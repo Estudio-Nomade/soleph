@@ -41,6 +41,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   import { addToCart, removeFromCart, isInCart, patchCartAlbumPricing } from '../../scripts/cart.js';
   import { isSupabaseConfigured } from '../../lib/supabase.js';
   import { getPublishedAlbum } from '../../lib/shop-live.js';
+  import {
+    loadStorefrontSettings,
+    resolveAlbumMessage,
+    DEFAULT_ALBUM_MESSAGE,
+  } from '../../lib/settings.js';
 
   const root = document.querySelector('[data-live-album]');
   const loadingEl = root?.querySelector('[data-loading]');
@@ -250,7 +255,27 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         }`;
       }
       if (messageEl) {
-        messageEl.textContent = album.message || 'Elegí las fotos y agregalas al carrito.';
+        let msg = album.message || 'Elegí las fotos y agregalas al carrito.';
+        try {
+          const store = await loadStorefrontSettings({
+            album_messages: { default: DEFAULT_ALBUM_MESSAGE },
+          });
+          msg = resolveAlbumMessage(
+            album.slug || album.id,
+            store.album_messages,
+            album.message,
+            'Elegí las fotos y agregalas al carrito.',
+            { preferOwn: true },
+          );
+          // también probar por uuid por si el override se guardó con id live
+          if (album.id && album.slug && album.id !== album.slug) {
+            const byUuid = store.album_messages?.by_id?.[album.id];
+            if (byUuid) msg = byUuid;
+          }
+        } catch (_) {
+          /* keep album.message */
+        }
+        messageEl.textContent = msg;
       }
 
       const unit = Number(album.photo_price_ars) || 0;

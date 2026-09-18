@@ -13,6 +13,9 @@ const { album } = Astro.props;
 const unit = album.photo_price;
 const tiers = album.price_tiers;
 const isPortfolio = album.kind === 'portfolio';
+const initialMessage =
+  album.message ||
+  'Alta resolución. Cuando confirmamos la transferencia por WhatsApp, te la mando por ahí.';
 ---
 
 <BaseLayout title={album.name} description={`Comprá fotos de ${album.name}`} ogImage={album.cover}>
@@ -26,7 +29,7 @@ const isPortfolio = album.kind === 'portfolio';
     </header>
 
     <div class="album-top">
-      <p class="lead">{album.message}</p>
+      <p class="lead" data-album-message>{initialMessage}</p>
       <div class="price-tiers" aria-label="Precios">
         <span>1 foto · ${unit.toLocaleString('es-AR')}</span>
         {
@@ -82,12 +85,33 @@ const isPortfolio = album.kind === 'portfolio';
   </main>
 </BaseLayout>
 
-<script define:vars={{ unit, tiers }}>
+<script define:vars={{ unit, tiers, albumId: album.id, albumMessage: initialMessage }}>
   window.__SOLEPH_PRICE__ = { unitPrice: unit, tiers };
+  window.__SOLEPH_ALBUM_ID__ = albumId;
+  window.__SOLEPH_ALBUM_MESSAGE__ = albumMessage;
 </script>
 
 <script>
   import { addToCart, removeFromCart, isInCart, getCart } from '../../scripts/cart.js';
+  import { isSupabaseConfigured } from '../../lib/supabase.js';
+  import { loadStorefrontSettings, resolveAlbumMessage, DEFAULT_ALBUM_MESSAGE } from '../../lib/settings.js';
+
+  // hydrate message from admin storefront settings (sin redeploy)
+  (async () => {
+    const el = document.querySelector('[data-album-message]');
+    const albumId = window.__SOLEPH_ALBUM_ID__ || '';
+    const own = window.__SOLEPH_ALBUM_MESSAGE__ || '';
+    if (!el || !isSupabaseConfigured()) return;
+    try {
+      const store = await loadStorefrontSettings({
+        album_messages: { default: DEFAULT_ALBUM_MESSAGE },
+      });
+      const msg = resolveAlbumMessage(albumId, store.album_messages, own, DEFAULT_ALBUM_MESSAGE);
+      if (msg) el.textContent = msg;
+    } catch (err) {
+      console.warn('album message', err);
+    }
+  })();
 
   function syncSelected() {
     document.querySelectorAll('[data-photo]').forEach((tile) => {
