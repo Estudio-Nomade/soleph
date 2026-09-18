@@ -495,3 +495,141 @@
   color: #5b6b7c;
   font-weight: 400;
 }
+
+.admin-upload-cats {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.admin-upload-cat {
+  border: 1px solid #d7dee6;
+  border-radius: 10px;
+  padding: 0.85rem 0.9rem;
+  background: #f8fafc;
+}
+
+.admin-upload-cat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.admin-upload-cat-head strong {
+  color: var(--navy);
+  font-size: 0.98rem;
+}
+
+.admin-upload-cat input[type='file'] {
+  display: none;
+}
+
+.admin-queue-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: #e8eef6;
+  color: var(--navy);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.admin-queue {
+  margin-top: 1rem;
+  border: 1px solid #d7dee6;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.admin-queue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid #e3e9ef;
+  background: #f8fafc;
+}
+
+.admin-queue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem 0 0.55rem;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.admin-queue-group {
+  padding: 0.35rem 0.85rem 0.55rem;
+}
+
+.admin-queue-group + .admin-queue-group {
+  border-top: 1px solid #eef2f6;
+}
+
+.admin-queue-group-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #5b6b7c;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.35rem;
+}
+
+.admin-queue-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.admin-queue-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 0.86rem;
+  color: #2d455c;
+}
+
+.admin-queue-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.admin-queue-more {
+  font-size: 0.82rem;
+  color: #5b6b7c;
+  padding: 0.2rem 0;
+}
+
+.admin-sticky-bar {
+  position: sticky;
+  bottom: 0.75rem;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid #d7dee6;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 24px rgba(1, 43, 85, 0.08);
+  backdrop-filter: blur(6px);
+}
+
+@media (max-width: 640px) {
+  .admin-sticky-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
