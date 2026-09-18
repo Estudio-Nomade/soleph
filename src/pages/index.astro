@@ -14,27 +14,33 @@ const currency = site.shop.currencySymbol;
 >
   <main class="page page--home">
     <header class="home-hero">
-      <div class="home-hero-visual">
+      <div class="home-hero-banner" aria-hidden="false">
         <img
-          class="home-hero-mark"
-          src="/images/logosinfondo.jpg"
-          alt={site.brand.name}
-          width="688"
-          height="688"
-        />
-        <img
-          class="home-hero-cover"
+          class="home-hero-bg"
           src="/images/fotoportada.jpg"
           alt=""
           width="1280"
           height="853"
+          decoding="async"
+          fetchpriority="high"
         />
+        <div class="home-hero-overlay">
+          <img
+            class="home-hero-mark"
+            src="/images/logosinfondo.png"
+            alt={site.brand.name}
+            width="542"
+            height="150"
+          />
+        </div>
       </div>
-      <p class="home-tag">{site.brand.tagline}</p>
-      <p class="home-lead">{site.shop.intro}</p>
-      <div class="home-cta">
-        <a class="btn" href="/tienda/buscar">Buscar mis fotos</a>
-        <a class="btn btn-ghost" href="#eventos">Ver álbumes</a>
+      <div class="home-hero-copy">
+        <p class="home-tag">{site.brand.tagline}</p>
+        <p class="home-lead">{site.shop.intro}</p>
+        <div class="home-cta">
+          <a class="btn" href="/tienda/buscar">Buscar mis fotos</a>
+          <a class="btn btn-ghost" href="#eventos">Ver álbumes</a>
+        </div>
       </div>
     </header>
 
