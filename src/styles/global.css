@@ -1378,7 +1378,8 @@ select {
 @media (min-width: 933px) {
   :root {
     --page-pad: 3%;
-    --header-h: 56px;
+    /* barra blanca más fina; el texto del nav se mantiene en 15px */
+    --header-h: 44px;
   }
 
   .page {
@@ -1386,7 +1387,7 @@ select {
   }
 
   .logo-link img {
-    height: 44px;
+    height: 34px;
   }
 
   .nav-desktop {
@@ -1405,16 +1406,35 @@ select {
     gap: 0.5rem;
   }
 
+  /* Menos blanco bajo el fixed header (el spacer era el “colchón” grande) */
+  .header-spacer {
+    height: 22px;
+  }
+
+  /* En home el spacer casi no hace falta: la portada arranca ya bajo la barra */
+  body:has(.page--home) .header-spacer {
+    height: 0;
+  }
+
   .home-hero {
     margin-bottom: 1.75rem;
   }
 
   .home-hero-banner {
-    min-height: clamp(340px, 40vw, 560px);
+    min-height: clamp(380px, 46vw, 620px);
   }
 
+  /* Más abajo el foco → se ven los pies del caballo */
+  .home-hero-bg {
+    object-position: center 88%;
+  }
+
+  /* Logo bajo la barra fija (antes quedaba tapado con spacer 0) */
   .home-hero-overlay {
-    padding-top: 0.85rem;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: calc(var(--header-h) + 0.85rem);
+    padding-bottom: 3rem;
   }
 
   .home-logo {
@@ -1423,8 +1443,13 @@ select {
   }
 
   .home-hero-mark {
-    width: min(22vw, 220px);
-    max-width: 220px;
+    display: block;
+    width: min(20vw, 200px);
+    max-width: 200px;
+    margin-top: 0;
+    opacity: 1;
+    visibility: visible;
+    z-index: 2;
   }
 
   .home-hero-copy {
