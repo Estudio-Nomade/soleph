@@ -2,30 +2,28 @@
 import site from '../data/site.json';
 const year = new Date().getFullYear();
 const ig = site.brand.instagram;
+/** @type {string} */
+let igHandle = '';
+if (ig) {
+  try {
+    const path = new URL(ig).pathname.replace(/^\/+|\/+$/g, '');
+    igHandle = path ? `@${path.split('/')[0]}` : '';
+  } catch {
+    igHandle = '';
+  }
+}
 ---
 
 <footer class="site-footer">
   <a class="back-top" href="#top">↑ Volver arriba</a>
   <div class="brand">{site.brand.name.toUpperCase()}</div>
-  <div class="site-footer-meta">
-    <span>{site.brand.location}</span>
-    {
-      ig && (
-        <>
-          <span class="site-footer-sep" aria-hidden="true">
-            ·
-          </span>
-          <a
-            class="site-footer-ig"
-            href={ig}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Instagram
-          </a>
-        </>
-      )
-    }
-  </div>
+  {
+    ig && igHandle && (
+      <a class="site-footer-ig" href={ig} target="_blank" rel="noopener noreferrer">
+        {igHandle}
+      </a>
+    )
+  }
+  <div class="site-footer-meta">{site.brand.location}</div>
   <div>© {year}</div>
 </footer>
