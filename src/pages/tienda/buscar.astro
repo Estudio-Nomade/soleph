@@ -76,6 +76,10 @@ const onlyEvents = eventAlbums.length > 0;
         <h2 data-results-title>Resultados</h2>
         <p data-results-sub></p>
       </header>
+      <p class="face-hint" style="margin:0 0 0.75rem">
+        Tocá la foto para agrandarla. Marcá el cuadrado para elegir y después
+        <strong>Agregar al carrito</strong>.
+      </p>
       <div class="photo-grid" data-results-grid></div>
       <p class="face-hint" data-results-empty hidden>No encontramos coincidencias claras. Probá otra selfie con mejor luz.</p>
     </section>
@@ -85,7 +89,9 @@ const onlyEvents = eventAlbums.length > 0;
 <script>
   import { isSupabaseConfigured, publicStorageUrl, BUCKETS } from '../../lib/supabase.js';
   import { listSearchableAlbums, searchAlbumBySelfie } from '../../lib/face.js';
-  import { addToCart, isInCart, removeFromCart } from '../../scripts/cart.js';
+  import { bindPhotoTile, ensureSelectBar, paintAllTiles } from '../../scripts/shop-select.js';
+
+  ensureSelectBar();
 
   const form = document.querySelector('[data-face-search]');
   const select = document.querySelector('[data-event-select]');
@@ -159,6 +165,14 @@ const onlyEvents = eventAlbums.length > 0;
     return opt?.getAttribute('data-source') === 'live';
   }
 
+  function escapeHtml(s) {
+    return String(s)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
+  }
+
   function renderMatches(matches, albumMeta) {
     if (!results || !resultsGrid) return;
     results.hidden = false;
@@ -177,48 +191,31 @@ const onlyEvents = eventAlbums.length > 0;
     for (const m of matches) {
       const src = m.previewUrl || publicStorageUrl(BUCKETS.previews, m.previewPath);
       const code = m.code || String(m.photoId || '').replace(/-/g, '').slice(0, 8).toUpperCase();
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'photo-tile';
-      btn.dataset.photo = '';
-      btn.dataset.id = m.photoId;
-      btn.dataset.code = code;
-      btn.dataset.src = src;
-      btn.dataset.thumb = src;
-      btn.dataset.albumId = albumMeta?.id || select.value;
-      btn.dataset.albumName = albumMeta?.name || '';
-      btn.dataset.unit = String(unit);
-      btn.innerHTML = `
-        <img src="${src}" alt="#${code}" loading="lazy" width="600" height="600" />
-        <span class="photo-code-badge" title="Código de la foto">#${code}</span>
-        <span class="add" data-add>Agregar</span>
+      const el = document.createElement('div');
+      el.className = 'photo-tile';
+      el.dataset.photo = '';
+      el.dataset.id = m.photoId;
+      el.dataset.code = code;
+      el.dataset.src = src;
+      el.dataset.thumb = src;
+      el.dataset.albumId = albumMeta?.id || select.value;
+      el.dataset.albumName = albumMeta?.name || '';
+      el.dataset.unit = String(unit);
+      el.innerHTML = `
+        <button type="button" class="photo-tile-open" data-open-photo aria-label="Ver #${escapeHtml(code)} en grande">
+          <img src="${escapeHtml(src)}" alt="#${escapeHtml(code)}" loading="lazy" width="600" height="600" />
+        </button>
+        <span class="photo-code-badge" title="Código de la foto">#${escapeHtml(code)}</span>
+        <label class="photo-check" title="Elegir foto">
+          <input type="checkbox" data-select aria-label="Elegir #${escapeHtml(code)}" />
+          <span class="photo-check-box" aria-hidden="true"></span>
+        </label>
+        <span class="photo-in-cart" data-in-cart-mark hidden>En carrito</span>
       `;
-      btn.addEventListener('click', () => {
-        const id = m.photoId;
-        if (isInCart(id)) removeFromCart(id);
-        else {
-          addToCart({
-            id,
-            code,
-            src,
-            thumb: src,
-            albumId: albumMeta?.id || select.value,
-            albumName: albumMeta?.name || '',
-            unitPrice: unit,
-          });
-        }
-        const on = isInCart(id);
-        btn.classList.toggle('is-selected', on);
-        const label = btn.querySelector('[data-add]');
-        if (label) label.textContent = on ? 'En carrito' : 'Agregar';
-      });
-      if (isInCart(m.photoId)) {
-        btn.classList.add('is-selected');
-        const label = btn.querySelector('[data-add]');
-        if (label) label.textContent = 'En carrito';
-      }
-      resultsGrid.appendChild(btn);
+      bindPhotoTile(el, resultsGrid);
+      resultsGrid.appendChild(el);
     }
+    paintAllTiles(resultsGrid);
   }
 
   async function hydrateLiveAlbums() {

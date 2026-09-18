@@ -76,35 +76,57 @@ function drawLogoWatermark(ctx, logo, width, height) {
   const lh = logo.naturalHeight || logo.height || 1;
   const aspect = lw / lh;
 
-  // tile diagonal (marca repetida)
-  const tileW = Math.max(90, Math.round(Math.min(width, height) * 0.22));
-  const tileH = Math.max(28, Math.round(tileW / aspect));
-  const gapY = tileH * 2.4;
-  const gapX = tileW * 1.35;
+  // tile diagonal — logo en negro (más oscuro / legible sobre cielos claros)
+  const tileW = Math.max(100, Math.round(Math.min(width, height) * 0.24));
+  const tileH = Math.max(30, Math.round(tileW / aspect));
+  const gapY = tileH * 2.15;
+  const gapX = tileW * 1.25;
 
   ctx.save();
   ctx.translate(width / 2, height / 2);
   ctx.rotate((-28 * Math.PI) / 180);
-  ctx.globalAlpha = 0.16;
-  const extent = Math.max(width, height) * 1.35;
+  const extent = Math.max(width, height) * 1.4;
   for (let y = -extent; y <= extent; y += gapY) {
     for (let x = -extent; x <= extent; x += gapX) {
-      ctx.drawImage(logo, x - tileW / 2, y - tileH / 2, tileW, tileH);
+      const dx = x - tileW / 2;
+      const dy = y - tileH / 2;
+      // silueta negra
+      ctx.save();
+      ctx.globalAlpha = 0.34;
+      ctx.filter = 'brightness(0)';
+      ctx.drawImage(logo, dx, dy, tileW, tileH);
+      ctx.restore();
+      // toque del logo original encima (más bajo)
+      ctx.save();
+      ctx.globalAlpha = 0.18;
+      ctx.filter = 'none';
+      ctx.drawImage(logo, dx, dy, tileW, tileH);
+      ctx.restore();
     }
   }
   ctx.restore();
 
-  // logo esquina inferior derecha
-  const cornerW = Math.max(72, Math.round(Math.min(width, height) * 0.16));
-  const cornerH = Math.max(22, Math.round(cornerW / aspect));
+  // logo esquina inferior derecha — más presente
+  const cornerW = Math.max(88, Math.round(Math.min(width, height) * 0.18));
+  const cornerH = Math.max(26, Math.round(cornerW / aspect));
   const pad = Math.round(Math.min(width, height) * 0.03);
+  const cx = width - pad - cornerW;
+  const cy = height - pad - cornerH;
+
   ctx.save();
-  ctx.globalAlpha = 0.55;
-  // soft shadow plate
-  ctx.shadowColor = 'rgba(0,0,0,0.35)';
-  ctx.shadowBlur = 10;
+  // plato oscuro detrás para contraste
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+  ctx.fillRect(cx - 8, cy - 6, cornerW + 16, cornerH + 12);
+  ctx.shadowColor = 'rgba(0,0,0,0.45)';
+  ctx.shadowBlur = 12;
   ctx.shadowOffsetY = 2;
-  ctx.drawImage(logo, width - pad - cornerW, height - pad - cornerH, cornerW, cornerH);
+  // negro fuerte
+  ctx.globalAlpha = 0.72;
+  ctx.filter = 'brightness(0)';
+  ctx.drawImage(logo, cx, cy, cornerW, cornerH);
+  ctx.filter = 'none';
+  ctx.globalAlpha = 0.35;
+  ctx.drawImage(logo, cx, cy, cornerW, cornerH);
   ctx.restore();
 }
 

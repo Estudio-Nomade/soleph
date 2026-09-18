@@ -4,7 +4,10 @@
 <div class="lightbox" data-lightbox aria-hidden="true">
   <button type="button" class="close" data-lightbox-close aria-label="Cerrar">×</button>
   <button type="button" class="nav prev" data-lightbox-prev aria-label="Anterior">‹</button>
-  <img src="" alt="" data-lightbox-img />
+  <div class="lightbox-stage">
+    <img src="" alt="" data-lightbox-img />
+    <span class="wm-overlay wm-overlay--lightbox" aria-hidden="true"></span>
+  </div>
   <button type="button" class="nav next" data-lightbox-next aria-label="Siguiente">›</button>
 </div>
 
@@ -15,16 +18,19 @@
   let index = 0;
 
   function open(list, start = 0) {
-    sources = list;
-    index = start;
+    sources = (list || []).filter(Boolean);
+    if (!sources.length) return;
+    index = Math.max(0, Math.min(start, sources.length - 1));
     show();
     root?.classList.add('is-open');
     root?.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('lightbox-open');
   }
 
   function close() {
     root?.classList.remove('is-open');
     root?.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('lightbox-open');
   }
 
   function show() {
@@ -57,11 +63,19 @@
     if (e.key === 'ArrowLeft') prev();
   });
 
-  document.querySelectorAll('[data-gallery]').forEach((gallery) => {
+  // galerías de proyectos (Trabajos) — delegación (galería se llena async)
+  document.addEventListener('click', (e) => {
+    const t = /** @type {HTMLElement} */ (e.target);
+    const fig = t.closest?.('figure[data-full]');
+    if (!fig) return;
+    const gallery = fig.closest('[data-gallery]');
+    if (!gallery) return;
     const figs = [...gallery.querySelectorAll('figure[data-full]')];
     const list = figs.map((f) => f.getAttribute('data-full')).filter(Boolean);
-    figs.forEach((fig, i) => {
-      fig.addEventListener('click', () => open(list, i));
-    });
+    const i = figs.indexOf(fig);
+    if (i >= 0) open(list, i);
   });
+
+  // API global para grillas de tienda
+  window.solephLightbox = { open, close, next, prev };
 </script>

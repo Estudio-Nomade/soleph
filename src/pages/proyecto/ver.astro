@@ -1,6 +1,5 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import Lightbox from '../../components/Lightbox.astro';
 import site from '../../data/site.json';
 ---
 
@@ -21,7 +20,6 @@ import site from '../../data/site.json';
       <div class="related-grid" data-related-grid></div>
     </section>
   </main>
-  <Lightbox />
 </BaseLayout>
 
 <script define:vars={{ siteSeed: site }}>

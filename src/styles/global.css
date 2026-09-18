@@ -896,15 +896,56 @@ select {
   background: #eef1f4;
   border: 0;
   padding: 0;
-  cursor: pointer;
+  cursor: default;
   aspect-ratio: 1;
   overflow: hidden;
+  display: block;
+  width: 100%;
+}
+
+.photo-tile-open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+  position: relative;
 }
 
 .photo-tile img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+/* Marca de agua CSS (series estáticas / lightbox). Eventos live ya traen logo en el JPEG. */
+.wm-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.04)),
+    url('/images/logosinfondo.png');
+  background-size: 42% auto;
+  background-repeat: repeat;
+  background-position: center;
+  opacity: 0.42;
+  filter: brightness(0);
+  mix-blend-mode: multiply;
+  transform: rotate(-28deg) scale(1.45);
+  transform-origin: center;
+}
+
+.wm-overlay--lightbox {
+  opacity: 0.38;
+  background-size: 28% auto;
+  transform: rotate(-28deg) scale(1.25);
 }
 
 .photo-tile .wm {
@@ -913,18 +954,19 @@ select {
   display: grid;
   place-items: center;
   pointer-events: none;
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(0, 0, 0, 0.45);
   font-weight: 700;
   font-size: clamp(0.7rem, 3.2vw, 1.1rem);
   letter-spacing: 0.06em;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+  z-index: 1;
 }
 
 .photo-tile .photo-code-badge {
   position: absolute;
   left: 0.35rem;
   top: 0.35rem;
-  z-index: 2;
+  z-index: 3;
   padding: 0.28rem 0.45rem;
   border-radius: 4px;
   background: rgba(1, 43, 85, 0.88);
@@ -938,18 +980,90 @@ select {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
 }
 
-.photo-tile .add {
+/* Checkbox cuadrado multi-select */
+.photo-check {
   position: absolute;
   right: 0.35rem;
+  top: 0.35rem;
+  z-index: 4;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.photo-check input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+
+.photo-check-box {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 2px solid #fff;
+  background: rgba(1, 43, 85, 0.35);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
+  display: grid;
+  place-items: center;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+}
+
+.photo-check-box::after {
+  content: '';
+  width: 12px;
+  height: 7px;
+  border-left: 2.5px solid #fff;
+  border-bottom: 2.5px solid #fff;
+  transform: rotate(-45deg) translate(1px, -1px) scale(0);
+  transition: transform 0.12s ease;
+}
+
+.photo-check input:focus-visible + .photo-check-box {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.photo-tile.is-picked .photo-check-box,
+.photo-check input:checked + .photo-check-box {
+  background: var(--navy);
+  border-color: #fff;
+}
+
+.photo-tile.is-picked .photo-check-box::after,
+.photo-check input:checked + .photo-check-box::after {
+  transform: rotate(-45deg) translate(1px, -1px) scale(1);
+}
+
+.photo-tile.is-picked {
+  outline: 3px solid var(--navy);
+  outline-offset: -3px;
+}
+
+.photo-in-cart {
+  position: absolute;
+  left: 0.35rem;
   bottom: 0.35rem;
-  background: rgba(1, 43, 85, 0.92);
+  z-index: 3;
+  background: rgba(10, 122, 62, 0.92);
   color: #fff;
   border: 0;
-  padding: 0.4rem 0.55rem;
-  font-size: 0.72rem;
+  padding: 0.28rem 0.5rem;
+  font-size: 0.68rem;
   font-weight: 700;
-  z-index: 2;
-  min-height: 36px;
+  pointer-events: none;
+  border-radius: 4px;
+}
+
+/* legacy .add pill — hide if still present */
+.photo-tile .add {
+  display: none;
 }
 
 .photo-tile.is-selected {
@@ -959,6 +1073,81 @@ select {
 
 .photo-tile.is-selected .add {
   background: #0a7a3e;
+}
+
+/* Barra fija multi-select → carrito */
+.shop-select-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 65;
+  padding: 0.65rem var(--page-pad) calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  background: rgba(255, 255, 255, 0.96);
+  border-top: 1px solid var(--soft);
+  box-shadow: 0 -8px 28px rgba(1, 43, 85, 0.12);
+  transform: translateY(110%);
+  transition: transform 0.2s ease;
+  pointer-events: none;
+}
+
+.shop-select-bar.is-on,
+.shop-select-bar:not([hidden]) {
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.shop-select-bar[hidden] {
+  display: block !important;
+  transform: translateY(110%);
+  pointer-events: none;
+}
+
+.shop-select-bar-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.shop-select-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.shop-select-meta strong {
+  color: var(--navy);
+  font-size: 0.95rem;
+}
+
+.shop-select-clear {
+  border: 0;
+  background: transparent;
+  color: var(--navy-hover);
+  font-size: 0.82rem;
+  font-weight: 650;
+  padding: 0.15rem 0;
+  text-align: left;
+  cursor: pointer;
+  min-height: 32px;
+}
+
+.shop-select-bar .btn {
+  flex-shrink: 0;
+  min-height: 48px;
+  padding-inline: 1.1rem;
+}
+
+body.has-shop-select {
+  padding-bottom: 5.5rem;
+}
+
+body.lightbox-open {
+  overflow: hidden;
 }
 
 .face-box {
@@ -1252,7 +1441,7 @@ select {
   position: fixed;
   inset: 0;
   z-index: 70;
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(1, 20, 40, 0.92);
   display: none;
   align-items: center;
   justify-content: center;
@@ -1263,22 +1452,34 @@ select {
   display: flex;
 }
 
+.lightbox-stage {
+  position: relative;
+  max-width: min(1100px, 94vw);
+  max-height: 82vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .lightbox img {
   max-width: min(1100px, 94vw);
   max-height: 82vh;
   object-fit: contain;
+  display: block;
 }
 
 .lightbox .close,
 .lightbox .nav {
   position: absolute;
   border: 0;
-  background: transparent;
-  color: var(--navy);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
   cursor: pointer;
   font-size: 1.75rem;
   width: var(--tap);
   height: var(--tap);
+  border-radius: 999px;
+  z-index: 2;
 }
 
 .lightbox .close {
@@ -1287,11 +1488,11 @@ select {
 }
 
 .lightbox .prev {
-  left: 0.15rem;
+  left: 0.35rem;
 }
 
 .lightbox .next {
-  right: 0.15rem;
+  right: 0.35rem;
 }
 
 .site-footer {
