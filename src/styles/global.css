@@ -5,7 +5,7 @@
   --soft: #b0bdcb;
   --ink: #0e2032;
   --bg: #ffffff;
-  --header-h: 60px;
+  --header-h: 48px;
   --page-pad: 1.1rem;
   --max: 1500px;
   --serif: georgia, "times new roman", serif;
@@ -116,7 +116,7 @@ select {
 }
 
 .logo-link img {
-  height: 46px;
+  height: 36px;
   width: auto;
 }
 
@@ -284,7 +284,8 @@ select {
   right: 50%;
   margin-left: -50vw;
   margin-right: -50vw;
-  min-height: clamp(220px, 42vw, 420px);
+  /* más portada en viewport; header más bajo deja menos franja blanca */
+  min-height: clamp(260px, 52vw, 520px);
   overflow: hidden;
   background: #0e2032;
 }
@@ -296,7 +297,8 @@ select {
   height: 100%;
   max-width: none;
   object-fit: cover;
-  object-position: center;
+  /* prioriza el cielo de la foto */
+  object-position: center 18%;
   display: block;
 }
 
@@ -304,25 +306,25 @@ select {
   position: relative;
   z-index: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   min-height: inherit;
-  padding: 1.5rem var(--page-pad);
+  padding: 0.55rem var(--page-pad) 2.75rem;
   background: linear-gradient(
     180deg,
-    rgba(1, 43, 85, 0.18) 0%,
-    rgba(1, 43, 85, 0.28) 55%,
-    rgba(1, 43, 85, 0.42) 100%
+    rgba(1, 43, 85, 0.08) 0%,
+    rgba(1, 43, 85, 0.12) 35%,
+    rgba(1, 43, 85, 0.36) 100%
   );
 }
 
 .home-hero-mark {
   display: block;
-  width: min(72vw, 320px);
-  max-width: 320px;
+  width: min(48vw, 168px);
+  max-width: 168px;
   height: auto;
-  margin: 0 auto;
-  filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.45));
+  margin: 0.15rem auto 0;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.4));
 }
 
 .home-hero-copy {
@@ -1300,11 +1302,11 @@ select {
 @media (min-width: 640px) {
   :root {
     --page-pad: 1.5rem;
-    --header-h: 68px;
+    --header-h: 52px;
   }
 
   .logo-link img {
-    height: 54px;
+    height: 40px;
   }
 
   .home-logo {
@@ -1313,12 +1315,16 @@ select {
   }
 
   .home-hero-banner {
-    min-height: clamp(280px, 36vw, 460px);
+    min-height: clamp(300px, 44vw, 540px);
+  }
+
+  .home-hero-overlay {
+    padding-top: 0.7rem;
   }
 
   .home-hero-mark {
-    width: min(48vw, 400px);
-    max-width: 400px;
+    width: min(32vw, 200px);
+    max-width: 200px;
   }
 
   .work-grid,
@@ -1372,7 +1378,7 @@ select {
 @media (min-width: 933px) {
   :root {
     --page-pad: 3%;
-    --header-h: 72px;
+    --header-h: 56px;
   }
 
   .page {
@@ -1380,7 +1386,7 @@ select {
   }
 
   .logo-link img {
-    height: 58px;
+    height: 44px;
   }
 
   .nav-desktop {
@@ -1404,7 +1410,11 @@ select {
   }
 
   .home-hero-banner {
-    min-height: clamp(320px, 32vw, 520px);
+    min-height: clamp(340px, 40vw, 560px);
+  }
+
+  .home-hero-overlay {
+    padding-top: 0.85rem;
   }
 
   .home-logo {
@@ -1413,8 +1423,8 @@ select {
   }
 
   .home-hero-mark {
-    width: min(36vw, 460px);
-    max-width: 460px;
+    width: min(22vw, 220px);
+    max-width: 220px;
   }
 
   .home-hero-copy {
