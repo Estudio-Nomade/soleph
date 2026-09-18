@@ -28,8 +28,12 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
       <div class="shop-tools shop-tools--row" style="margin-bottom:1rem;">
         <div class="cat-chips" data-cat-chips hidden role="tablist" aria-label="Categorías"></div>
-        <button type="button" class="btn btn-ghost" data-open-cart>Ver carrito</button>
+        <a class="btn btn-ghost" href="/tienda/carrito">Ir al carrito</a>
       </div>
+      <p class="face-hint" style="margin:0 0 0.75rem">
+        Tocá la foto para agrandarla. Marcá el cuadrado para elegir una o varias y después
+        <strong>Agregar al carrito</strong>.
+      </p>
 
       <div data-album-sections></div>
       <p class="face-hint" data-empty hidden>Este evento todavía no tiene fotos publicadas.</p>
@@ -38,7 +42,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 </BaseLayout>
 
 <script>
-  import { addToCart, removeFromCart, isInCart, patchCartAlbumPricing } from '../../scripts/cart.js';
+  import { patchCartAlbumPricing } from '../../scripts/cart.js';
   import { isSupabaseConfigured } from '../../lib/supabase.js';
   import { getPublishedAlbum } from '../../lib/shop-live.js';
   import {
@@ -46,6 +50,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     resolveAlbumMessage,
     DEFAULT_ALBUM_MESSAGE,
   } from '../../lib/settings.js';
+  import {
+    bindPhotoTile,
+    ensureSelectBar,
+    paintAllTiles,
+  } from '../../scripts/shop-select.js';
 
   const root = document.querySelector('[data-live-album]');
   const loadingEl = root?.querySelector('[data-loading]');
@@ -67,6 +76,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   /** @type {string} '' = todas */
   let activeCat = '';
 
+  ensureSelectBar();
+
   function showError(msg) {
     if (!errorEl) return;
     errorEl.hidden = !msg;
@@ -81,52 +92,33 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       .replaceAll('"', '&quot;');
   }
 
-  function syncSelected() {
-    sectionsEl?.querySelectorAll('[data-photo]').forEach((tile) => {
-      const id = tile.getAttribute('data-id');
-      const on = id && isInCart(id);
-      tile.classList.toggle('is-selected', !!on);
-      const label = tile.querySelector('[data-add]');
-      if (label) label.textContent = on ? 'En carrito' : 'Agregar';
-    });
-  }
-
   function makeTile(photo, unit) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'photo-tile';
-    btn.dataset.photo = '';
-    btn.dataset.id = photo.id;
+    const el = document.createElement('div');
+    el.className = 'photo-tile';
+    el.dataset.photo = '';
+    el.dataset.id = photo.id;
     const code = photo.code || String(photo.id || '').replace(/-/g, '').slice(0, 8).toUpperCase();
-    btn.dataset.code = code;
-    btn.dataset.src = photo.src;
-    btn.dataset.thumb = photo.thumb || photo.src;
-    btn.dataset.albumId = album.id;
-    btn.dataset.albumName = album.name;
-    btn.dataset.unit = String(unit);
-    if (photo.categoryId) btn.dataset.cat = photo.categoryId;
-    btn.innerHTML = `
-      <img src="${photo.thumb || photo.src}" alt="${code ? `#${code}` : ''}" loading="lazy" width="600" height="600" />
-      <span class="photo-code-badge" title="Código de la foto">#${code}</span>
-      <span class="add" data-add>Agregar</span>
+    el.dataset.code = code;
+    el.dataset.src = photo.src;
+    el.dataset.thumb = photo.thumb || photo.src;
+    el.dataset.albumId = album.id;
+    el.dataset.albumName = album.name;
+    el.dataset.unit = String(unit);
+    if (photo.categoryId) el.dataset.cat = photo.categoryId;
+    // live previews already have logo watermark baked in — no CSS overlay
+    el.innerHTML = `
+      <button type="button" class="photo-tile-open" data-open-photo aria-label="Ver #${escapeHtml(code)} en grande">
+        <img src="${escapeHtml(photo.thumb || photo.src)}" alt="#${escapeHtml(code)}" loading="lazy" width="600" height="600" />
+      </button>
+      <span class="photo-code-badge" title="Código de la foto">#${escapeHtml(code)}</span>
+      <label class="photo-check" title="Elegir foto">
+        <input type="checkbox" data-select aria-label="Elegir #${escapeHtml(code)}" />
+        <span class="photo-check-box" aria-hidden="true"></span>
+      </label>
+      <span class="photo-in-cart" data-in-cart-mark hidden>En carrito</span>
     `;
-    btn.addEventListener('click', () => {
-      const id = photo.id;
-      if (isInCart(id)) removeFromCart(id);
-      else {
-        addToCart({
-          id,
-          code,
-          src: photo.src,
-          thumb: photo.thumb || photo.src,
-          albumId: album.id,
-          albumName: album.name,
-          unitPrice: unit,
-        });
-      }
-      syncSelected();
-    });
-    return btn;
+    bindPhotoTile(el, sectionsEl || document);
+    return el;
   }
 
   function groupPhotos() {
@@ -143,7 +135,6 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     if (uncategorized.length) {
       groups.push({ id: '', name: cats.length ? 'Sin categoría' : 'Todas', photos: uncategorized });
     }
-    // drop empty cats unless filtering none
     return groups.filter((g) => g.photos.length > 0);
   }
 
@@ -157,7 +148,6 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     }
     const total = album.photos.length;
     const items = [{ id: '', name: 'Todas', count: total }, ...groups.map((g) => ({ id: g.id, name: g.name, count: g.photos.length }))];
-    // unique by id
     const seen = new Set();
     const uniq = items.filter((it) => {
       const k = it.id || '__all__';
@@ -194,7 +184,6 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     }
     emptyEl && (emptyEl.hidden = true);
 
-    // "Todas": una sola grilla, sin separar por categoría
     if (activeCat === '') {
       const section = document.createElement('section');
       section.className = 'album-cat-section';
@@ -204,7 +193,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       for (const photo of album.photos) grid.appendChild(makeTile(photo, unit));
       section.appendChild(grid);
       sectionsEl.appendChild(section);
-      syncSelected();
+      paintAllTiles(sectionsEl);
       return;
     }
 
@@ -223,7 +212,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       section.appendChild(grid);
       sectionsEl.appendChild(section);
     }
-    syncSelected();
+    paintAllTiles(sectionsEl);
   }
 
   async function load() {
@@ -308,7 +297,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
       renderSections();
       readyEl && (readyEl.hidden = false);
-      window.addEventListener('soleph:cart', syncSelected);
+      window.addEventListener('soleph:cart', () => paintAllTiles(sectionsEl || document));
     } catch (err) {
       loadingEl && (loadingEl.hidden = true);
       showError(err?.message || 'No se pudo cargar el evento');

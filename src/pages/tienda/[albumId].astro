@@ -56,30 +56,47 @@ const initialMessage =
       )
     }
 
+    <p class="face-hint" style="margin:0 0 0.75rem">
+      Tocá la foto para agrandarla. Marcá el cuadrado para elegir una o varias y después
+      <strong>Agregar al carrito</strong>.
+    </p>
+
     <div class="shop-tools" style="justify-content:flex-start; margin-bottom:1rem;">
-      <button type="button" class="btn btn-ghost" data-open-cart>Ver carrito</button>
+      <a class="btn btn-ghost" href="/tienda/carrito">Ir al carrito</a>
     </div>
 
     <section class="photo-grid" data-photo-grid>
       {
-        album.photos.map((photo) => (
-          <button
-            type="button"
-            class="photo-tile"
-            data-photo
-            data-id={photo.id}
-            data-code={photo.code || String(photo.id).replace(/-/g, '').slice(0, 8).toUpperCase()}
-            data-src={photo.src}
-            data-thumb={photo.thumb}
-            data-album-id={album.id}
-            data-album-name={album.name}
-            data-unit={unit}
-          >
-            <img src={photo.thumb} alt={photo.code || photo.id} loading="lazy" width="600" height="600" />
-            <span class="photo-code-badge">#{photo.code || String(photo.id).replace(/-/g, '').slice(0, 8).toUpperCase()}</span>
-            <span class="add" data-add>Agregar</span>
-          </button>
-        ))
+        album.photos.map((photo) => {
+          const code =
+            photo.code || String(photo.id).replace(/-/g, '').slice(0, 8).toUpperCase();
+          return (
+            <div
+              class="photo-tile"
+              data-photo
+              data-id={photo.id}
+              data-code={code}
+              data-src={photo.src}
+              data-thumb={photo.thumb}
+              data-album-id={album.id}
+              data-album-name={album.name}
+              data-unit={unit}
+            >
+              <button type="button" class="photo-tile-open" data-open-photo aria-label={`Ver #${code} en grande`}>
+                <img src={photo.thumb} alt={`#${code}`} loading="lazy" width="600" height="600" />
+                <span class="wm-overlay" aria-hidden="true" />
+              </button>
+              <span class="photo-code-badge">#{code}</span>
+              <label class="photo-check" title="Elegir foto">
+                <input type="checkbox" data-select aria-label={`Elegir #${code}`} />
+                <span class="photo-check-box" aria-hidden="true" />
+              </label>
+              <span class="photo-in-cart" data-in-cart-mark hidden>
+                En carrito
+              </span>
+            </div>
+          );
+        })
       }
     </section>
   </main>
@@ -92,9 +109,9 @@ const initialMessage =
 </script>
 
 <script>
-  import { addToCart, removeFromCart, isInCart, getCart } from '../../scripts/cart.js';
   import { isSupabaseConfigured } from '../../lib/supabase.js';
   import { loadStorefrontSettings, resolveAlbumMessage, DEFAULT_ALBUM_MESSAGE } from '../../lib/settings.js';
+  import { bindPhotoGrid, ensureSelectBar } from '../../scripts/shop-select.js';
 
   // hydrate message from admin storefront settings (sin redeploy)
   (async () => {
@@ -113,42 +130,8 @@ const initialMessage =
     }
   })();
 
-  function syncSelected() {
-    document.querySelectorAll('[data-photo]').forEach((tile) => {
-      const id = tile.getAttribute('data-id');
-      const on = id && isInCart(id);
-      tile.classList.toggle('is-selected', !!on);
-      const label = tile.querySelector('[data-add]');
-      if (label) label.textContent = on ? 'En carrito' : 'Agregar';
-    });
-  }
-
-  document.querySelectorAll('[data-photo]').forEach((tile) => {
-    tile.addEventListener('click', (e) => {
-      const id = tile.getAttribute('data-id');
-      const src = tile.getAttribute('data-src');
-      if (!id || !src) return;
-
-      // if clicking the add label or the tile
-      if (isInCart(id)) {
-        removeFromCart(id);
-      } else {
-        addToCart({
-          id,
-          code: tile.getAttribute('data-code') || '',
-          src,
-          thumb: tile.getAttribute('data-thumb') || src,
-          albumId: tile.getAttribute('data-album-id') || '',
-          albumName: tile.getAttribute('data-album-name') || '',
-          unitPrice: Number(tile.getAttribute('data-unit') || 5000),
-        });
-      }
-      syncSelected();
-    });
-  });
-
-  window.addEventListener('soleph:cart', syncSelected);
-  syncSelected();
+  ensureSelectBar();
+  bindPhotoGrid(document.querySelector('[data-photo-grid]') || document);
 
   const faceInput = document.querySelector('[data-face-input]');
   const facePreview = document.querySelector('[data-face-preview]');
@@ -174,7 +157,6 @@ const initialMessage =
     if (faceInput) faceInput.value = '';
   }
 
-  // llegada desde /tienda/buscar
   if (params.get('face') === '1' || sessionStorage.getItem('soleph-face-demo') === '1') {
     sessionStorage.removeItem('soleph-face-demo');
     applyDemoFaceFilter(sessionStorage.getItem('soleph-face-name') || 'selfie');
