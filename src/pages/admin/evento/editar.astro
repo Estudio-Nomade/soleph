@@ -125,7 +125,10 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 
       <div class="admin-card">
         <h2 class="admin-section-title">Zona de riesgo</h2>
-        <button type="button" class="admin-btn admin-btn--danger" data-delete-album>Borrar evento</button>
+        <p class="admin-muted" style="margin-top:0" data-delete-hint>
+          Borra el álbum de la base y de la tienda (fotos incluidas). No se puede deshacer.
+        </p>
+        <button type="button" class="admin-btn admin-btn--danger" data-delete-album>Borrar álbum</button>
       </div>
 
       <div class="admin-sticky-bar">
@@ -598,12 +601,18 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     form.message.value = album.message || '';
     // search_by_face always on for events (hidden input)
     if (unitPriceInput) unitPriceInput.value = album.photo_price_ars ?? 5000;
-    if (titleEl) titleEl.textContent = album.name || 'Evento';
+    const isPortfolio = album.kind === 'portfolio';
+    if (titleEl) titleEl.textContent = album.name || (isPortfolio ? 'Portafolio' : 'Evento');
     if (subEl) {
       const q = queue.length ? ` · ${queue.length} en cola` : '';
+      const tipo = isPortfolio ? 'Portafolio' : 'Evento';
       subEl.textContent = album.published
-        ? `Publicado · ${formatArs(album.photo_price_ars)} c/u${q}`
-        : `Borrador · ${formatArs(album.photo_price_ars)} c/u · Subir evento lo publica${q}`;
+        ? `${tipo} · Publicado · ${formatArs(album.photo_price_ars)} c/u${q}`
+        : `${tipo} · Borrador · ${formatArs(album.photo_price_ars)} c/u · Subir evento lo publica${q}`;
+    }
+    const delBtn = root?.querySelector('[data-delete-album]');
+    if (delBtn && !delBtn.disabled) {
+      delBtn.textContent = isPortfolio ? 'Borrar álbum de portafolio' : 'Borrar evento';
     }
     if (tiersEl) {
       renderTier(Array.isArray(album.price_tiers) ? album.price_tiers : []);
@@ -1037,18 +1046,72 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   });
 
   root?.querySelector('[data-delete-album]')?.addEventListener('click', async () => {
-    if (!confirm('Esto borra el evento y sus fotos en la base. ¿Seguro?')) return;
+    const kindLabel = album?.kind === 'portfolio' ? 'álbum de portafolio' : 'evento';
+    if (
+      !confirm(
+        `Esto borra el ${kindLabel} y sus fotos de la base y de la tienda. No se puede deshacer. ¿Seguro?`,
+      )
+    ) {
+      return;
+    }
+    const btn = root.querySelector('[data-delete-album]');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Borrando…';
+    }
     try {
       const sb = getSupabase();
       const pathsP = photos.map((p) => p.preview_path).filter(Boolean);
       const pathsO = photos.map((p) => p.original_path).filter(Boolean);
-      if (pathsP.length) await sb.storage.from(BUCKETS.previews).remove(pathsP);
-      if (pathsO.length) await sb.storage.from(BUCKETS.originals).remove(pathsO);
-      const { error } = await sb.from('albums').delete().eq('id', albumId);
+      const cover = album?.cover_path ? [album.cover_path] : [];
+
+      // storage best-effort (no bloquear si falla un path)
+      if (pathsP.length) {
+        try {
+          await sb.storage.from(BUCKETS.previews).remove(pathsP);
+        } catch (_) {}
+      }
+      if (cover.length) {
+        try {
+          await sb.storage.from(BUCKETS.previews).remove(cover);
+        } catch (_) {}
+        try {
+          await sb.storage.from(BUCKETS.covers).remove(cover);
+        } catch (_) {}
+      }
+      if (pathsO.length) {
+        try {
+          await sb.storage.from(BUCKETS.originals).remove(pathsO);
+        } catch (_) {}
+      }
+
+      // FKs sin cascade en order_items → limpiar antes
+      const { error: oiErr } = await sb.from('order_items').delete().eq('album_id', albumId);
+      if (oiErr) console.warn('order_items cleanup', oiErr.message);
+
+      // face_embeddings / categories / photos suelen cascade, pero borramos photos explícito por si RLS
+      try {
+        await sb.from('face_embeddings').delete().eq('album_id', albumId);
+      } catch (_) {}
+      const { error: phErr } = await sb.from('photos').delete().eq('album_id', albumId);
+      if (phErr) throw phErr;
+
+      const { data: deleted, error } = await sb.from('albums').delete().eq('id', albumId).select('id');
       if (error) throw error;
+      if (!deleted?.length) {
+        throw new Error(
+          'No se borró el álbum (¿sin permiso o ya no existe?). Probá hard refresh en /admin.',
+        );
+      }
+
       window.location.assign('/admin');
     } catch (err) {
       showError(err?.message || 'No se pudo borrar');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent =
+          album?.kind === 'portfolio' ? 'Borrar álbum de portafolio' : 'Borrar evento';
+      }
     }
   });
 

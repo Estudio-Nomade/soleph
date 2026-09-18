@@ -150,12 +150,17 @@ const currency = site.shop.currencySymbol;
     const n = Number(unit) || 0;
     if (!n) return;
     const label = n.toLocaleString('es-AR');
-    document.querySelectorAll('[data-section="portfolio"] .price-pill, [data-section="events-static"] .price-pill').forEach((el) => {
-      el.textContent = `desde ${currency}${label}`;
-    });
+    // solo seed estático: las cards live ya traen su precio
+    document
+      .querySelectorAll(
+        '[data-section="portfolio"] .album-card:not([data-live]) .price-pill, [data-section="events-static"] .price-pill',
+      )
+      .forEach((el) => {
+        el.textContent = `desde ${currency}${label}`;
+      });
   }
 
-  function cardHtml(album) {
+  function cardHtml(album, { compact = false } = {}) {
     const name = escapeHtml(album.name || '');
     const date = escapeHtml(album.date_label || '');
     const count = Number(album.photo_count) || 0;
@@ -163,8 +168,10 @@ const currency = site.shop.currencySymbol;
     const cover = escapeHtml(album.cover || '/images/logo.png');
     const href = `/tienda/evento?id=${encodeURIComponent(album.id)}`;
     const filter = `${album.name || ''} ${album.date_label || ''}`.toLowerCase();
-    return `<a class="album-card" href="${href}" data-album-name="${escapeHtml(filter)}" data-live="1">
-      <img src="${cover}" alt="${name}" loading="lazy" width="1000" height="625" />
+    const kind = album.kind === 'portfolio' ? 'portfolio' : 'event';
+    const cls = compact ? 'album-card album-card--compact' : 'album-card';
+    return `<a class="${cls}" href="${href}" data-album-name="${escapeHtml(filter)}" data-live="1" data-live-kind="${kind}">
+      <img src="${cover}" alt="${name}" loading="lazy" width="${compact ? 800 : 1000}" height="${compact ? 500 : 625}" />
       <div class="body">
         <h3>${name}</h3>
         <div class="meta">${date}${date ? ' · ' : ''}${count} fotos</div>
@@ -179,13 +186,30 @@ const currency = site.shop.currencySymbol;
       const live = await listPublishedAlbums({ kind: 'event' });
       if (!live.length) return;
       liveGrid.hidden = false;
-      liveGrid.innerHTML = live.map(cardHtml).join('');
+      liveGrid.innerHTML = live.map((a) => cardHtml(a)).join('');
       // hide static demo events when we have real ones
       if (staticGrid) staticGrid.hidden = true;
       if (empty) empty.hidden = true;
       bindFilter();
     } catch (err) {
       console.warn('live events', err);
+    }
+  }
+
+  /**
+   * Portafolio vendible desde SB (kind=portfolio).
+   * Si hay live, reemplaza el seed de site.json: borrar en admin = desaparece de la tienda.
+   * Si no hay ninguno, se deja el seed estático (series demo).
+   */
+  async function hydrateLivePortfolio() {
+    if (!isSupabaseConfigured() || !portfolioGrid) return;
+    try {
+      const live = await listPublishedAlbums({ kind: 'portfolio' });
+      if (!live.length) return;
+      portfolioGrid.innerHTML = live.map((a) => cardHtml(a, { compact: true })).join('');
+      bindFilter();
+    } catch (err) {
+      console.warn('live portfolio', err);
     }
   }
 
@@ -240,4 +264,5 @@ const currency = site.shop.currencySymbol;
   bindFilter();
   hydrateSharedPricing();
   hydrateLiveEvents();
+  hydrateLivePortfolio();
 </script>
