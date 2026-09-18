@@ -38,7 +38,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 </BaseLayout>
 
 <script>
-  import { addToCart, removeFromCart, isInCart } from '../../scripts/cart.js';
+  import { addToCart, removeFromCart, isInCart, patchCartAlbumPricing } from '../../scripts/cart.js';
   import { isSupabaseConfigured } from '../../lib/supabase.js';
   import { getPublishedAlbum } from '../../lib/shop-live.js';
 
@@ -92,7 +92,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     btn.className = 'photo-tile';
     btn.dataset.photo = '';
     btn.dataset.id = photo.id;
-    btn.dataset.code = photo.code || '';
+    const code = photo.code || String(photo.id || '').replace(/-/g, '').slice(0, 8).toUpperCase();
+    btn.dataset.code = code;
     btn.dataset.src = photo.src;
     btn.dataset.thumb = photo.thumb || photo.src;
     btn.dataset.albumId = album.id;
@@ -100,8 +101,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     btn.dataset.unit = String(unit);
     if (photo.categoryId) btn.dataset.cat = photo.categoryId;
     btn.innerHTML = `
-      <img src="${photo.thumb || photo.src}" alt="" loading="lazy" width="600" height="600" />
-      <span class="wm" aria-hidden="true">SOLE YAQUINTA</span>
+      <img src="${photo.thumb || photo.src}" alt="${code ? `#${code}` : ''}" loading="lazy" width="600" height="600" />
+      <span class="photo-code-badge" title="Código de la foto">#${code}</span>
       <span class="add" data-add>Agregar</span>
     `;
     btn.addEventListener('click', () => {
@@ -110,7 +111,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       else {
         addToCart({
           id,
-          code: photo.code || '',
+          code,
           src: photo.src,
           thumb: photo.thumb || photo.src,
           albumId: album.id,
@@ -254,7 +255,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
       const unit = Number(album.photo_price_ars) || 0;
       const tiers = Array.isArray(album.price_tiers) ? album.price_tiers : [];
-      window.__SOLEPH_PRICE__ = { unitPrice: unit, tiers };
+      window.__SOLEPH_PRICE__ = { unitPrice: unit, tiers, albumId: album.id };
+      // refresh unit on items already in cart from this album
+      patchCartAlbumPricing(album.id, { unitPrice: unit, albumName: album.name });
 
       if (tiersEl) {
         const bits = [`<span>1 foto · $${unit.toLocaleString('es-AR')}</span>`];
