@@ -1,0 +1,117 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Lightbox from '../../components/Lightbox.astro';
+import site from '../../data/site.json';
+---
+
+<BaseLayout title="Proyecto" description={`${site.brand.name} — trabajos`}>
+  <main class="page" data-project-live>
+    <p class="form-note" data-loading>Cargando…</p>
+    <p class="form-note" data-error hidden style="color:#8a1f1f"></p>
+
+    <header class="page-header" data-ready hidden>
+      <h1 data-title></h1>
+      <p data-year class="home-lead" style="margin-bottom:0"></p>
+    </header>
+
+    <section class="gallery" data-gallery data-ready hidden aria-label="Galería"></section>
+
+    <section class="related" data-related hidden>
+      <h2>También te puede interesar</h2>
+      <div class="related-grid" data-related-grid></div>
+    </section>
+  </main>
+  <Lightbox />
+</BaseLayout>
+
+<script define:vars={{ siteSeed: site }}>
+  window.__SOLEPH_SITE_SEED__ = siteSeed;
+</script>
+
+<script>
+  import {
+    loadPortfolioContent,
+    portfolioFallbackFromSite,
+  } from '../../lib/portfolio.js';
+
+  const root = document.querySelector('[data-project-live]');
+  const loading = root?.querySelector('[data-loading]');
+  const errEl = root?.querySelector('[data-error]');
+  const titleEl = root?.querySelector('[data-title]');
+  const yearEl = root?.querySelector('[data-year]');
+  const gallery = root?.querySelector('[data-gallery]');
+  const relatedSec = root?.querySelector('[data-related]');
+  const relatedGrid = root?.querySelector('[data-related-grid]');
+  const readyEls = root?.querySelectorAll('[data-ready]');
+
+  const slug = new URLSearchParams(window.location.search).get('slug') || '';
+
+  function escapeHtml(s) {
+    return String(s)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
+  }
+
+  async function run() {
+    if (!slug) {
+      loading && (loading.hidden = true);
+      if (errEl) {
+        errEl.hidden = false;
+        errEl.textContent = 'Falta el proyecto (?slug=…)';
+      }
+      return;
+    }
+    try {
+      const seed = portfolioFallbackFromSite(window.__SOLEPH_SITE_SEED__ || {});
+      const content = await loadPortfolioContent(seed);
+      const project = content.projects.find((p) => p.slug === slug);
+      if (!project) {
+        throw new Error('No encontramos ese proyecto');
+      }
+      document.title = `${project.title} - Sole Yaquinta`;
+      if (titleEl) titleEl.textContent = project.title;
+      if (yearEl) yearEl.textContent = project.year ? String(project.year) : '';
+      if (gallery) {
+        gallery.innerHTML = (project.images || [])
+          .map(
+            (src, i) => `
+          <figure data-full="${escapeHtml(src)}" class="${i >= 3 && i % 4 === 0 ? 'wide' : ''}">
+            <img src="${escapeHtml(src)}" alt="${escapeHtml(project.title)} ${i + 1}" loading="${
+              i < 2 ? 'eager' : 'lazy'
+            }" decoding="async" width="1600" height="1200" />
+          </figure>`,
+          )
+          .join('');
+      }
+      const related = content.projects.filter((p) => p.slug !== slug).slice(0, 3);
+      if (related.length && relatedGrid && relatedSec) {
+        relatedSec.hidden = false;
+        relatedGrid.innerHTML = related
+          .map(
+            (p) => `
+          <a class="related-card" href="/proyecto/ver?slug=${encodeURIComponent(p.slug)}">
+            <img src="${escapeHtml(p.cover)}" alt="${escapeHtml(p.title)}" loading="lazy" width="800" height="600" />
+            <div class="label"><strong>${escapeHtml(p.title)}</strong><span>${escapeHtml(
+              String(p.year || ''),
+            )}</span></div>
+          </a>`,
+          )
+          .join('');
+      }
+      loading && (loading.hidden = true);
+      readyEls?.forEach((el) => {
+        el.hidden = false;
+      });
+    } catch (err) {
+      loading && (loading.hidden = true);
+      if (errEl) {
+        errEl.hidden = false;
+        errEl.textContent = err?.message || 'No se pudo cargar';
+      }
+    }
+  }
+
+  run();
+</script>

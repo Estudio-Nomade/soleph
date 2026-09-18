@@ -10,13 +10,13 @@ import site from '../data/site.json';
   <main class="page">
     <header class="page-header">
       <h1>Trabajos</h1>
-      <p>Selección de proyectos y series.</p>
+      <p data-trabajos-intro>Selección de proyectos y series.</p>
     </header>
 
-    <section class="work-grid" aria-label="Proyectos">
+    <section class="work-grid" aria-label="Proyectos" data-work-grid>
       {
         site.projects.map((project) => (
-          <a class="work-card" href={project.href}>
+          <a class="work-card" href={`/proyecto/ver?slug=${project.slug}`} data-static-work>
             <img
               class="cover"
               src={project.cover}
@@ -34,7 +34,7 @@ import site from '../data/site.json';
           </a>
         ))
       }
-      <a class="work-card" href="/sobre-mi">
+      <a class="work-card" href="/sobre-mi" data-static-about>
         <img
           class="cover"
           src="/images/covers/sobre-mi.jpg"
@@ -53,3 +53,64 @@ import site from '../data/site.json';
     </section>
   </main>
 </BaseLayout>
+
+<script define:vars={{ siteSeed: site }}>
+  window.__SOLEPH_SITE_SEED__ = siteSeed;
+</script>
+
+<script>
+  import {
+    loadPortfolioContent,
+    portfolioFallbackFromSite,
+  } from '../lib/portfolio.js';
+
+  const grid = document.querySelector('[data-work-grid]');
+  const intro = document.querySelector('[data-trabajos-intro]');
+
+  function escapeHtml(s) {
+    return String(s)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
+  }
+
+  async function hydrate() {
+    if (!grid) return;
+    try {
+      const seed = portfolioFallbackFromSite(window.__SOLEPH_SITE_SEED__ || {});
+      const content = await loadPortfolioContent(seed);
+      if (intro && content.trabajos_intro) intro.textContent = content.trabajos_intro;
+      const aboutYear = new Date().getFullYear();
+      const cards = content.projects
+        .map(
+          (p) => `
+        <a class="work-card" href="/proyecto/ver?slug=${encodeURIComponent(p.slug)}">
+          <img class="cover" src="${escapeHtml(p.cover)}" alt="${escapeHtml(
+            p.title,
+          )}" loading="lazy" decoding="async" width="1200" height="900" />
+          <div class="meta">
+            <div class="title">${escapeHtml(p.title)}</div>
+            <div class="year">${escapeHtml(String(p.year || ''))}</div>
+          </div>
+        </a>`,
+        )
+        .join('');
+      const aboutCard = `
+        <a class="work-card" href="/sobre-mi">
+          <img class="cover" src="${escapeHtml(
+            content.about.image || '/images/covers/sobre-mi.jpg',
+          )}" alt="Sobre mí" loading="lazy" decoding="async" width="1200" height="900" />
+          <div class="meta">
+            <div class="title">${escapeHtml(content.about.title || 'Sobre mí')}</div>
+            <div class="year">${aboutYear}</div>
+          </div>
+        </a>`;
+      grid.innerHTML = cards + aboutCard;
+    } catch (err) {
+      console.warn('trabajos live', err);
+    }
+  }
+
+  hydrate();
+</script>
