@@ -34,13 +34,15 @@ const currency = site.shop.currencySymbol;
         <p class="shop-section-note">Álbumes de cada fecha.</p>
       </div>
 
+      <div class="album-grid" data-album-grid data-section="events" data-live-events hidden></div>
+
       {
         eventAlbums.length === 0 ? (
           <div class="shop-empty" data-events-empty>
             <p>{site.shop.events_empty}</p>
           </div>
         ) : (
-          <div class="album-grid" data-album-grid data-section="events">
+          <div class="album-grid" data-album-grid data-section="events-static">
             {eventAlbums.map((album) => (
               <a
                 class="album-card"
@@ -98,23 +100,86 @@ const currency = site.shop.currencySymbol;
   </main>
 </BaseLayout>
 
-<script>
-  const input = document.querySelector('[data-album-filter]');
-  const cards = [...document.querySelectorAll('[data-album-name]')];
-  const empty = document.querySelector('[data-events-empty]');
+<script define:vars={{ currency }}>
+  window.__SOLEPH_CURRENCY__ = currency || '$';
+</script>
 
-  input?.addEventListener('input', () => {
-    const q = String(input.value || '')
-      .trim()
-      .toLowerCase();
-    cards.forEach((card) => {
-      const name = card.getAttribute('data-album-name') || '';
-      card.style.display = !q || name.includes(q) ? '' : 'none';
-    });
-    if (empty) {
-      const eventCards = cards.filter((c) => c.closest('[data-section="events"]'));
-      const anyEventVisible = eventCards.some((c) => c.style.display !== 'none');
-      empty.style.display = eventCards.length === 0 || !q || anyEventVisible ? '' : 'none';
+<script>
+  import { isSupabaseConfigured } from '../lib/supabase.js';
+  import { listPublishedAlbums } from '../lib/shop-live.js';
+
+  const currency = window.__SOLEPH_CURRENCY__ || '$';
+  const liveGrid = document.querySelector('[data-live-events]');
+  const staticGrid = document.querySelector('[data-section="events-static"]');
+  const empty = document.querySelector('[data-events-empty]');
+  const input = document.querySelector('[data-album-filter]');
+
+  function escapeHtml(s) {
+    return String(s)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
+  }
+
+  function cardHtml(album) {
+    const name = escapeHtml(album.name || '');
+    const date = escapeHtml(album.date_label || '');
+    const count = Number(album.photo_count) || 0;
+    const price = Number(album.photo_price_ars || album.photo_price || 0);
+    const cover = escapeHtml(album.cover || '/images/logo.png');
+    const href = `/tienda/evento?id=${encodeURIComponent(album.id)}`;
+    const filter = `${album.name || ''} ${album.date_label || ''}`.toLowerCase();
+    return `<a class="album-card" href="${href}" data-album-name="${escapeHtml(filter)}" data-live="1">
+      <img src="${cover}" alt="${name}" loading="lazy" width="1000" height="625" />
+      <div class="body">
+        <h3>${name}</h3>
+        <div class="meta">${date}${date ? ' · ' : ''}${count} fotos</div>
+        <div class="price-pill">desde ${currency}${price.toLocaleString('es-AR')}</div>
+      </div>
+    </a>`;
+  }
+
+  async function hydrateLiveEvents() {
+    if (!isSupabaseConfigured() || !liveGrid) return;
+    try {
+      const live = await listPublishedAlbums({ kind: 'event' });
+      if (!live.length) return;
+      liveGrid.hidden = false;
+      liveGrid.innerHTML = live.map(cardHtml).join('');
+      // hide static demo events when we have real ones
+      if (staticGrid) staticGrid.hidden = true;
+      if (empty) empty.hidden = true;
+      bindFilter();
+    } catch (err) {
+      console.warn('live events', err);
     }
-  });
+  }
+
+  function bindFilter() {
+    const cards = [...document.querySelectorAll('[data-album-name]')];
+    input?.removeEventListener('input', onFilter);
+    input?.addEventListener('input', onFilter);
+    function onFilter() {
+      const q = String(input.value || '')
+        .trim()
+        .toLowerCase();
+      cards.forEach((card) => {
+        const name = card.getAttribute('data-album-name') || '';
+        card.style.display = !q || name.includes(q) ? '' : 'none';
+      });
+      if (empty && !liveGrid?.hidden) {
+        const liveCards = cards.filter((c) => c.getAttribute('data-live') === '1');
+        const any = liveCards.some((c) => c.style.display !== 'none');
+        empty.hidden = liveCards.length > 0 && ( !q || any);
+        if (liveCards.length && q && !any) {
+          empty.hidden = false;
+          empty.style.display = '';
+        }
+      }
+    }
+  }
+
+  bindFilter();
+  hydrateLiveEvents();
 </script>
