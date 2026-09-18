@@ -93,11 +93,15 @@
         const bits = [];
         for (const g of Object.values(groups || {})) {
           const next = [...(g.tiers || [])]
+            .filter((t) => Number(t.quantity) > 1)
             .sort((a, b) => a.quantity - b.quantity)
             .find((t) => g.qty < t.quantity);
-          if (next) bits.push(`Sumá ${next.quantity - g.qty} más → pack ${formatARS(next.price)}`);
+          if (next) {
+            const extra = next.quantity - g.qty;
+            bits.push(`Sumá ${extra} más → pack de ${next.quantity} por ${formatARS(next.price)}`);
+          }
         }
-        tierEl.textContent = bits[0] || (items.length ? 'Precio live del evento.' : '');
+        tierEl.textContent = bits[0] || (items.length ? 'Total con packs del álbum.' : '');
       }
     }
 

@@ -111,6 +111,7 @@ const formats = store.formats;
     formatARS,
     formatLabel,
     cartTotalByAlbums,
+    priceForQuantity,
     DEFAULT_FORMAT,
   } from '../../scripts/cart.js';
   import { isSupabaseConfigured, getSupabase } from '../../lib/supabase.js';
@@ -211,12 +212,24 @@ const formats = store.formats;
     if (tierEl) {
       const bits = [];
       for (const [aid, g] of Object.entries(groups || {})) {
-        const tiersList = g.tiers || [];
+        const tiersList = (g.tiers || []).filter((t) => Number(t.quantity) > 1);
         const next = [...tiersList].sort((a, b) => a.quantity - b.quantity).find((t) => g.qty < t.quantity);
         if (next) {
-          const name = albumPrices[aid]?.name || '';
+          const name = albumPrices[aid]?.name || g.name || '';
           bits.push(
             `${name ? name + ': ' : ''}con ${next.quantity} fotos el pack queda en ${formatARS(next.price)}`,
+          );
+        }
+      }
+      // breakdown of current total vs plain unit when packs apply
+      for (const [aid, g] of Object.entries(groups || {})) {
+        if (g.qty < 2) continue;
+        const plain = (Number(g.unit) || 0) * g.qty;
+        const packed = priceForQuantity(g.qty, g.unit, g.tiers);
+        if (plain > packed && packed > 0) {
+          const name = albumPrices[aid]?.name || g.name || '';
+          bits.unshift(
+            `${name ? name + ' · ' : ''}${g.qty} fotos = ${formatARS(packed)} (con packs)`,
           );
         }
       }
