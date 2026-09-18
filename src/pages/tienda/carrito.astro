@@ -1,20 +1,15 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import site from '../../data/site.json';
-import { loadTransferSettings } from '../../lib/settings.js';
+import { loadStorefrontSettings } from '../../lib/settings.js';
 
-const sample = site.shop.albums[0];
-const unit = sample?.photo_price ?? 5000;
-const tiers = sample?.price_tiers ?? [];
-const formats = site.shop.formats || {
-  default: 'redes',
-  options: [
-    { id: 'redes', label: 'Para redes', hint: 'Archivo liviano, listo para subir.' },
-    { id: 'impresion', label: 'Para impresión', hint: 'Alta resolución para imprimir.' },
-  ],
-};
 const wa = site.brand.whatsapp_digits || '5492494550855';
-const transfer = await loadTransferSettings(site.shop.transfer || { owner: 'Sole Yaquinta', alias: null, cbu: null });
+const store = await loadStorefrontSettings({
+  transfer: site.shop.transfer || { owner: 'Sole Yaquinta', alias: null, cbu: null },
+  formats: site.shop.formats,
+});
+const transfer = store.transfer;
+const formats = store.formats;
 ---
 
 <BaseLayout title="Carrito" description="Transferí y mandá el pedido a Sole por WhatsApp">
@@ -101,8 +96,7 @@ const transfer = await loadTransferSettings(site.shop.transfer || { owner: 'Sole
   </main>
 </BaseLayout>
 
-<script define:vars={{ unit, tiers, formats, wa, transfer }}>
-  window.__SOLEPH_PRICE__ = { unitPrice: unit, tiers };
+<script define:vars={{ formats, wa, transfer }}>
   window.__SOLEPH_FORMATS__ = formats;
   window.__SOLEPH_WA__ = wa;
   window.__SOLEPH_TRANSFER__ = transfer;
@@ -116,10 +110,11 @@ const transfer = await loadTransferSettings(site.shop.transfer || { owner: 'Sole
     clearCart,
     formatARS,
     formatLabel,
-    priceForQuantity,
+    cartTotalByAlbums,
     DEFAULT_FORMAT,
   } from '../../scripts/cart.js';
   import { isSupabaseConfigured, getSupabase } from '../../lib/supabase.js';
+  import { loadAlbumPrices, loadStorefrontSettings, normalizeFormats } from '../../lib/settings.js';
 
   const list = document.querySelector('[data-cart-page-list]');
   const totalEl = document.querySelector('[data-page-total]');
@@ -128,8 +123,7 @@ const transfer = await loadTransferSettings(site.shop.transfer || { owner: 'Sole
   const ok = document.querySelector('[data-checkout-success]');
   const paidCheck = document.querySelector('[data-paid]');
   const transferBox = document.querySelector('[data-transfer-box]');
-  const price = window.__SOLEPH_PRICE__ || { unitPrice: 5000, tiers: [] };
-  const formats = window.__SOLEPH_FORMATS__ || {
+  let formats = window.__SOLEPH_FORMATS__ || {
     default: DEFAULT_FORMAT,
     options: [
       { id: 'redes', label: 'Para redes' },
@@ -138,6 +132,8 @@ const transfer = await loadTransferSettings(site.shop.transfer || { owner: 'Sole
   };
   const wa = window.__SOLEPH_WA__ || form?.getAttribute('data-wa') || '5492494550855';
   let transfer = window.__SOLEPH_TRANSFER__ || {};
+  /** @type {Record<string, { unit: number, tiers: any[], name?: string }>} */
+  let albumPrices = {};
 
   function escapeHtml(s) {
     return String(s)
@@ -163,25 +159,24 @@ const transfer = await loadTransferSettings(site.shop.transfer || { owner: 'Sole
     `;
   }
 
-  async function refreshTransferFromDb() {
-    if (!isSupabaseConfigured()) return;
+  async function refreshLive() {
+    const items = getCart();
+    const ids = items.map((i) => i.albumId).filter(Boolean);
     try {
-      const sb = getSupabase();
-      const { data, error } = await sb.from('settings').select('value').eq('key', 'storefront').maybeSingle();
-      if (error) throw error;
-      const t = data?.value?.transfer;
-      if (!t || typeof t !== 'object') return;
-      transfer = {
-        owner: t.owner || transfer.owner || 'Sole Yaquinta',
-        alias: t.alias ?? null,
-        cbu: t.cbu ?? null,
-        bank: t.bank ?? null,
-      };
-      window.__SOLEPH_TRANSFER__ = transfer;
-      paintTransfer(transfer);
+      albumPrices = await loadAlbumPrices(ids);
+      // also refresh formats/transfer
+      if (isSupabaseConfigured()) {
+        const store = await loadStorefrontSettings({ formats, transfer });
+        transfer = store.transfer;
+        formats = store.formats;
+        window.__SOLEPH_FORMATS__ = formats;
+        window.__SOLEPH_TRANSFER__ = transfer;
+        paintTransfer(transfer);
+      }
     } catch (err) {
-      console.warn('transfer refresh', err);
+      console.warn('cart live', err);
     }
+    render();
   }
 
   function formatSelect(item) {
@@ -189,28 +184,43 @@ const transfer = await loadTransferSettings(site.shop.transfer || { owner: 'Sole
     const opts = (formats.options || [])
       .map(
         (opt) =>
-          `<option value="${opt.id}" ${opt.id === current ? 'selected' : ''}>${opt.label}</option>`
+          `<option value="${opt.id}" ${opt.id === current ? 'selected' : ''}>${escapeHtml(opt.label)}</option>`,
       )
       .join('');
+    const hint =
+      (formats.options || []).find((o) => o.id === current)?.hint ||
+      '';
     return `<label class="format-field">
       <span class="sr-only">Formato</span>
-      <select data-format="${item.id}" aria-label="Formato de ${item.id}">${opts}</select>
+      <select data-format="${item.id}" aria-label="Formato de #${item.code || item.id}">${opts}</select>
+      ${hint ? `<span class="format-hint field-hint">${escapeHtml(hint)}</span>` : ''}
     </label>`;
+  }
+
+  function unitLine(item) {
+    const live = item.albumId ? albumPrices[item.albumId] : null;
+    const unit = Number(live?.unit) || Number(item.unitPrice) || 0;
+    return unit ? `${formatARS(unit)} c/u` : '';
   }
 
   function render() {
     const items = getCart();
-    const total = priceForQuantity(items.length, price.unitPrice, price.tiers || []);
+    const { total, groups } = cartTotalByAlbums(items, albumPrices);
     if (totalEl) totalEl.textContent = formatARS(total);
 
     if (tierEl) {
-      const tiersList = price.tiers || [];
-      const next = [...tiersList].sort((a, b) => a.quantity - b.quantity).find((t) => items.length < t.quantity);
-      tierEl.textContent = next
-        ? `Con ${next.quantity} fotos el pack queda en ${formatARS(next.price)}.`
-        : items.length
-          ? 'Precio de pack aplicado.'
-          : '';
+      const bits = [];
+      for (const [aid, g] of Object.entries(groups || {})) {
+        const tiersList = g.tiers || [];
+        const next = [...tiersList].sort((a, b) => a.quantity - b.quantity).find((t) => g.qty < t.quantity);
+        if (next) {
+          const name = albumPrices[aid]?.name || '';
+          bits.push(
+            `${name ? name + ': ' : ''}con ${next.quantity} fotos el pack queda en ${formatARS(next.price)}`,
+          );
+        }
+      }
+      tierEl.textContent = bits.join(' · ');
     }
 
     if (!list) return;
@@ -228,13 +238,14 @@ const transfer = await loadTransferSettings(site.shop.transfer || { owner: 'Sole
       <div class="cart-item cart-item--format">
         <img src="${item.thumb || item.src}" alt="" width="72" height="72" />
         <div class="info">
-          <strong>${item.albumName || 'Foto'}</strong>
-          <span class="photo-code">#${item.code || item.id}</span>
+          <strong>${escapeHtml(item.albumName || 'Foto')}</strong>
+          <span class="photo-code">#${escapeHtml(item.code || String(item.id).slice(0, 8))}</span>
+          <span class="field-hint">${escapeHtml(unitLine(item))}</span>
           ${formatSelect(item)}
           <span class="format-current">${formatLabel(item.format)}</span>
         </div>
         <button type="button" class="remove" data-remove="${item.id}">Quitar</button>
-      </div>`
+      </div>`,
         )
         .join('');
 
@@ -249,6 +260,7 @@ const transfer = await loadTransferSettings(site.shop.transfer || { owner: 'Sole
       sel.addEventListener('change', () => {
         const id = sel.getAttribute('data-format');
         if (id) setItemFormat(id, sel.value);
+        render();
       });
     });
   }
@@ -275,7 +287,7 @@ const transfer = await loadTransferSettings(site.shop.transfer || { owner: 'Sole
       return;
     }
 
-    const total = priceForQuantity(items.length, price.unitPrice, price.tiers || []);
+    const { total } = cartTotalByAlbums(items, albumPrices);
     const orderId = 'ORD-' + Date.now().toString(36).toUpperCase();
     const transferLine = [
       transfer.owner || 'Sole Yaquinta',
@@ -331,5 +343,5 @@ const transfer = await loadTransferSettings(site.shop.transfer || { owner: 'Sole
 
   window.addEventListener('soleph:cart', render);
   render();
-  refreshTransferFromDb();
+  refreshLive();
 </script>

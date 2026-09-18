@@ -22,6 +22,29 @@ import site from '../../data/site.json';
 
     <div data-ready hidden>
       <div class="admin-card">
+        <h2 class="admin-section-title">Textos de la tienda (formatos)</h2>
+        <p class="admin-muted" style="margin-top:0">
+          Lo que ve el cliente al elegir “Para redes” / “Para impresión” en el carrito.
+          Ej.: <em>Alta resolución… te la mando por WhatsApp</em>.
+        </p>
+        <div class="admin-form" data-formats>
+          <label>
+            Texto “Para redes”
+            <textarea data-fmt-hint="redes" rows="2" maxlength="280" placeholder="Archivo liviano, listo para subir a IG/web."></textarea>
+          </label>
+          <label>
+            Texto “Para impresión”
+            <textarea
+              data-fmt-hint="impresion"
+              rows="2"
+              maxlength="280"
+              placeholder="Alta resolución. Cuando confirmamos la transferencia por WhatsApp, te la mando por ahí."
+            ></textarea>
+          </label>
+        </div>
+      </div>
+
+      <div class="admin-card">
         <h2 class="admin-section-title">Sobre mí</h2>
         <form class="admin-form" data-about-form onsubmit="return false">
           <label>
@@ -85,6 +108,7 @@ import site from '../../data/site.json';
     PORTFOLIO_SETTINGS_KEY,
   } from '../../lib/portfolio.js';
   import { getSupabase } from '../../lib/supabase.js';
+  import { loadStorefrontSettings, normalizeFormats, DEFAULT_FORMATS } from '../../lib/settings.js';
 
   const root = document.querySelector('[data-admin-portfolio]');
   const errEl = root?.querySelector('[data-error]');
@@ -96,10 +120,16 @@ import site from '../../data/site.json';
   const aboutFile = root?.querySelector('[data-about-file]');
   const projectsEl = root?.querySelector('[data-projects]');
   const introInput = root?.querySelector('[data-trabajos-intro]');
+  const fmtRedes = root?.querySelector('[data-fmt-hint="redes"]');
+  const fmtImp = root?.querySelector('[data-fmt-hint="impresion"]');
   const saveBtns = [...(root?.querySelectorAll('[data-save], [data-save-bottom]') || [])];
 
   /** @type {any} */
   let content = null;
+  /** @type {any} */
+  let storefront = {};
+  /** @type {any} */
+  let formats = DEFAULT_FORMATS;
   let busy = false;
 
   function showError(msg) {
@@ -129,6 +159,40 @@ import site from '../../data/site.json';
       aboutPreview.src = content.about.image || '/images/sobre-mi.jpg';
     }
     if (introInput) introInput.value = content.trabajos_intro || '';
+  }
+
+  function fillFormats() {
+    const opts = formats?.options || [];
+    const redes = opts.find((o) => o.id === 'redes') || DEFAULT_FORMATS.options[0];
+    const imp = opts.find((o) => o.id === 'impresion') || DEFAULT_FORMATS.options[1];
+    if (fmtRedes) fmtRedes.value = redes?.hint || '';
+    if (fmtImp) fmtImp.value = imp?.hint || '';
+  }
+
+  function readFormatsFromForm() {
+    const base = normalizeFormats(formats, DEFAULT_FORMATS);
+    const options = base.options.map((o) => {
+      if (o.id === 'redes') return { ...o, hint: String(fmtRedes?.value || '').trim() };
+      if (o.id === 'impresion') return { ...o, hint: String(fmtImp?.value || '').trim() };
+      return o;
+    });
+    // ensure both exist
+    if (!options.some((o) => o.id === 'redes')) {
+      options.unshift({
+        id: 'redes',
+        label: 'Para redes',
+        hint: String(fmtRedes?.value || '').trim(),
+      });
+    }
+    if (!options.some((o) => o.id === 'impresion')) {
+      options.push({
+        id: 'impresion',
+        label: 'Para impresión',
+        hint: String(fmtImp?.value || '').trim(),
+      });
+    }
+    formats = normalizeFormats({ default: base.default, options }, DEFAULT_FORMATS);
+    return formats;
   }
 
   function projectCard(p, idx) {
@@ -305,6 +369,7 @@ import site from '../../data/site.json';
         return;
       }
     }
+    const formatsPayload = readFormatsFromForm();
     busy = true;
     saveBtns.forEach((b) => (b.disabled = true));
     try {
@@ -315,10 +380,26 @@ import site from '../../data/site.json';
         updated_at: new Date().toISOString(),
       });
       if (error) throw error;
+
+      // merge formats into storefront (keep transfer etc.)
+      const nextStore = {
+        ...(storefront && typeof storefront === 'object' ? storefront : {}),
+        formats: formatsPayload,
+      };
+      const { error: sErr } = await sb.from('settings').upsert({
+        key: 'storefront',
+        value: nextStore,
+        updated_at: new Date().toISOString(),
+      });
+      if (sErr) throw sErr;
+      storefront = nextStore;
+      formats = formatsPayload;
+
       content = payload;
       fillAbout();
+      fillFormats();
       renderProjects();
-      showOk('Portafolio guardado · ya se ve en la web (hard refresh si hace falta)');
+      showOk('Guardado · portafolio + textos de tienda ya en la web (hard refresh si hace falta)');
     } catch (err) {
       showError(err?.message || 'No se pudo guardar');
     } finally {
@@ -333,9 +414,17 @@ import site from '../../data/site.json';
     const gate = await requireAdminOrRedirect();
     if (!gate) return;
     try {
-      const seed = portfolioFallbackFromSite(window.__SOLEPH_SITE_SEED__ || {});
+      const seedSite = window.__SOLEPH_SITE_SEED__ || {};
+      const seed = portfolioFallbackFromSite(seedSite);
       content = await loadPortfolioContent(seed);
+      const store = await loadStorefrontSettings({
+        formats: seedSite.shop?.formats,
+        transfer: seedSite.shop?.transfer,
+      });
+      formats = store.formats;
+      storefront = store.raw || { transfer: store.transfer, formats: store.formats };
       fillAbout();
+      fillFormats();
       renderProjects();
       loadingEl && (loadingEl.hidden = true);
       readyEl && (readyEl.hidden = false);

@@ -176,20 +176,21 @@ const onlyEvents = eventAlbums.length > 0;
     const unit = albumMeta?.photo_price_ars || 5000;
     for (const m of matches) {
       const src = m.previewUrl || publicStorageUrl(BUCKETS.previews, m.previewPath);
+      const code = m.code || String(m.photoId || '').replace(/-/g, '').slice(0, 8).toUpperCase();
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'photo-tile';
       btn.dataset.photo = '';
       btn.dataset.id = m.photoId;
-      btn.dataset.code = m.code || String(m.photoId || '').replace(/-/g, '').slice(0, 8).toUpperCase();
+      btn.dataset.code = code;
       btn.dataset.src = src;
       btn.dataset.thumb = src;
       btn.dataset.albumId = albumMeta?.id || select.value;
       btn.dataset.albumName = albumMeta?.name || '';
       btn.dataset.unit = String(unit);
       btn.innerHTML = `
-        <img src="${src}" alt="" loading="lazy" width="600" height="600" />
-        <span class="wm" aria-hidden="true">SOLE YAQUINTA</span>
+        <img src="${src}" alt="#${code}" loading="lazy" width="600" height="600" />
+        <span class="photo-code-badge" title="Código de la foto">#${code}</span>
         <span class="add" data-add>Agregar</span>
       `;
       btn.addEventListener('click', () => {
@@ -198,7 +199,7 @@ const onlyEvents = eventAlbums.length > 0;
         else {
           addToCart({
             id,
-            code: m.code || btn.dataset.code,
+            code,
             src,
             thumb: src,
             albumId: albumMeta?.id || select.value,

@@ -72,8 +72,8 @@ const isPortfolio = album.kind === 'portfolio';
             data-album-name={album.name}
             data-unit={unit}
           >
-            <img src={photo.thumb} alt={photo.id} loading="lazy" width="600" height="600" />
-            <span class="wm" aria-hidden="true">SOLE YAQUINTA</span>
+            <img src={photo.thumb} alt={photo.code || photo.id} loading="lazy" width="600" height="600" />
+            <span class="photo-code-badge">#{photo.code || String(photo.id).replace(/-/g, '').slice(0, 8).toUpperCase()}</span>
             <span class="add" data-add>Agregar</span>
           </button>
         ))
