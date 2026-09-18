@@ -79,20 +79,6 @@
       "href": "/proyecto/cordillera"
     },
     {
-      "slug": "pruebas-de-riendas",
-      "title": "Deporte ecuestre",
-      "year": 2026,
-      "cover": "/images/covers/pruebas-de-riendas.jpg",
-      "images": [
-        "/images/projects/pruebas-de-riendas/01.jpg",
-        "/images/projects/pruebas-de-riendas/02.jpg",
-        "/images/projects/pruebas-de-riendas/03.jpg",
-        "/images/projects/pruebas-de-riendas/04.jpg",
-        "/images/projects/pruebas-de-riendas/05.jpg"
-      ],
-      "href": "/proyecto/pruebas-de-riendas"
-    },
-    {
       "slug": "la-makeka",
       "title": "LA MAKEKA",
       "year": 2026,
@@ -146,7 +132,7 @@
     "events_title": "Eventos",
     "events_empty": "Todavía no hay álbumes de eventos publicados. Cuando Sole suba uno, aparece acá arriba.",
     "portfolio_title": "Del portafolio",
-    "portfolio_intro": "Selección de trabajos. Más chiquitas acá abajo, pero también se pueden comprar.",
+    "portfolio_intro": "También podés adquirir mis fotografías en formato digital, listas para imprimir y armar un cuadro.",
     "albums": [
       {
         "id": "paisajes",
@@ -281,63 +267,6 @@
             "id": "cordillera-13",
             "src": "/images/projects/cordillera/13.jpg",
             "thumb": "/images/projects/cordillera/13.jpg"
-          }
-        ],
-        "photo_price": 3500,
-        "price_tiers": [
-          {
-            "quantity": 1,
-            "price": 3500
-          },
-          {
-            "quantity": 3,
-            "price": 9000
-          },
-          {
-            "quantity": 5,
-            "price": 13000
-          },
-          {
-            "quantity": 10,
-            "price": 23000
-          }
-        ],
-        "message": "Alta resolución. Cuando confirmamos la transferencia por WhatsApp, te la mando por ahí.",
-        "search_by_face": false,
-        "search_by_number": false,
-        "kind": "portfolio"
-      },
-      {
-        "id": "pruebas-de-riendas",
-        "name": "Deporte ecuestre",
-        "date_label": "2026",
-        "cover": "/images/covers/pruebas-de-riendas.jpg",
-        "photo_count": 5,
-        "photos": [
-          {
-            "id": "pruebas-de-riendas-01",
-            "src": "/images/projects/pruebas-de-riendas/01.jpg",
-            "thumb": "/images/projects/pruebas-de-riendas/01.jpg"
-          },
-          {
-            "id": "pruebas-de-riendas-02",
-            "src": "/images/projects/pruebas-de-riendas/02.jpg",
-            "thumb": "/images/projects/pruebas-de-riendas/02.jpg"
-          },
-          {
-            "id": "pruebas-de-riendas-03",
-            "src": "/images/projects/pruebas-de-riendas/03.jpg",
-            "thumb": "/images/projects/pruebas-de-riendas/03.jpg"
-          },
-          {
-            "id": "pruebas-de-riendas-04",
-            "src": "/images/projects/pruebas-de-riendas/04.jpg",
-            "thumb": "/images/projects/pruebas-de-riendas/04.jpg"
-          },
-          {
-            "id": "pruebas-de-riendas-05",
-            "src": "/images/projects/pruebas-de-riendas/05.jpg",
-            "thumb": "/images/projects/pruebas-de-riendas/05.jpg"
           }
         ],
         "photo_price": 3500,
