@@ -52,7 +52,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         </label>
         <label class="admin-check">
           <input type="checkbox" name="search_by_face" checked />
-          Permitir “Buscar mis fotos” (cara) cuando esté conectado
+          Indexar caras para “Buscar mis fotos” (recomendado, siempre on)
         </label>
         <button class="admin-btn" type="submit" data-submit>Crear y seguir</button>
       </form>
@@ -106,7 +106,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         { quantity: 5, price: Number(fd.get('photo_price_ars') || 5000) * 3 },
         { quantity: 10, price: Number(fd.get('photo_price_ars') || 5000) * 5 },
       ],
-      search_by_face: fd.get('search_by_face') === 'on',
+      search_by_face: true,
       published: false,
     };
     if (!name) {

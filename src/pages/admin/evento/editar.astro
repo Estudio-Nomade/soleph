@@ -49,10 +49,10 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
             Mensaje al comprador
             <textarea name="message" maxlength="500"></textarea>
           </label>
-          <label class="admin-check">
-            <input type="checkbox" name="search_by_face" />
-            Permitir “Buscar mis fotos” por cara
-          </label>
+          <p class="admin-muted" style="margin:0">
+            Cada foto se indexa para <strong>Buscar mis fotos</strong> al subir (automático).
+          </p>
+          <input type="hidden" name="search_by_face" value="on" />
           <p class="admin-muted" data-publish-note style="margin:0">
             Al tocar <strong>Subir evento</strong> el álbum queda publicado en la tienda.
           </p>
@@ -142,7 +142,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   import { requireAdminOrRedirect, formatArs } from '../../../lib/admin-auth.js';
   import { getSupabase, publicStorageUrl, BUCKETS } from '../../../lib/supabase.js';
   import { makeWatermarkedPreview, safeFileBase } from '../../../lib/watermark.js';
-  import { indexPhotoFaces } from '../../../lib/face.js';
+  import { indexPhotoFacesWithRetry, photoHasIndexedFaces } from '../../../lib/face.js';
   import {
     cameraCodeFromFilename,
     slugifyCategory,
@@ -596,8 +596,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     form.date_label.value = album.date_label || '';
     form.kind.value = album.kind === 'portfolio' ? 'portfolio' : 'event';
     form.message.value = album.message || '';
-    form.search_by_face.checked = album.search_by_face !== false;
-    // published is forced true on Subir evento (hidden input); keep note honest
+    // search_by_face always on for events (hidden input)
     if (unitPriceInput) unitPriceInput.value = album.photo_price_ars ?? 5000;
     if (titleEl) titleEl.textContent = album.name || 'Evento';
     if (subEl) {
@@ -721,7 +720,8 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       kind: String(fd.get('kind') || 'event') === 'portfolio' ? 'portfolio' : 'event',
       photo_price_ars: unit,
       message: String(fd.get('message') || '').trim() || null,
-      search_by_face: fd.get('search_by_face') === 'on',
+      // eventos siempre con búsqueda por cara; portfolio también indexa al subir
+      search_by_face: true,
       // Subir evento siempre publica; Guardar cambios (precios) no toca published
       ...(publish ? { published: true } : {}),
       price_tiers,
@@ -744,7 +744,8 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     let errors = 0;
     const startOrder = photos.reduce((m, p) => Math.max(m, p.sort_order || 0), 0);
     const usedCodes = new Set(photos.map((p) => String(p.code || '').toUpperCase()).filter(Boolean));
-    const faceOn = album?.search_by_face !== false;
+    // Siempre indexar TODAS las fotos subidas (eventos y portfolio vendible)
+    const mustIndexFaces = true;
 
     uploadStatus && (uploadStatus.hidden = false);
 
@@ -810,28 +811,30 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
           album.cover_path = previewPath;
         }
 
-        if (faceOn) {
+        if (mustIndexFaces) {
           try {
             uploadStatus &&
               (uploadStatus.textContent = `Indexando caras ${i + 1}/${items.length}…`);
-            const faceRes = await indexPhotoFaces({
+            const faceRes = await indexPhotoFacesWithRetry({
               photoId: row.id,
               albumId,
               image: previewBlob,
+              attempts: 3,
             });
             faces += faceRes.faces || 0;
+            row.rekognition_face_ids = faceRes.faceIds || [];
             row._faces = faceRes.faces;
             if (!faceRes.faces) {
-              // no faces found in this frame — not a hard error
+              // sin cara en la foto: igual “indexada” (array vacío OK); no bloquea
               console.info('face index 0 faces', row.id);
             }
           } catch (faceErr) {
             errors += 1;
             console.warn('face index', faceErr);
             showError(
-              `Foto subida, pero no se indexaron caras (${file.name}): ${
+              `Foto subida, pero falló el índice de caras (${file.name}): ${
                 faceErr?.message || 'error'
-              }`,
+              }. Reintentá con Subir evento o revisá sesión admin.`,
             );
           }
         }
@@ -850,6 +853,37 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     await loadPhotoCategories();
     renderPhotos();
     return { uploaded, faces, errors };
+  }
+
+  /** Reindexa fotos del evento que todavía no tienen rekognition_face_ids */
+  async function backfillMissingFaceIndex() {
+    const missing = photos.filter((p) => !photoHasIndexedFaces(p) && p.preview_path);
+    if (!missing.length) return { faces: 0, errors: 0, scanned: 0 };
+    let faces = 0;
+    let errors = 0;
+    uploadStatus && (uploadStatus.hidden = false);
+    for (let i = 0; i < missing.length; i += 1) {
+      const p = missing[i];
+      try {
+        uploadStatus &&
+          (uploadStatus.textContent = `Indexando caras pendientes ${i + 1}/${missing.length}…`);
+        const url = publicStorageUrl(BUCKETS.previews, p.preview_path);
+        const faceRes = await indexPhotoFacesWithRetry({
+          photoId: p.id,
+          albumId,
+          image: url,
+          attempts: 3,
+        });
+        faces += faceRes.faces || 0;
+        p.rekognition_face_ids = faceRes.faceIds || [];
+        p._faces = faceRes.faces;
+      } catch (err) {
+        errors += 1;
+        console.warn('backfill face', p.id, err);
+        showError(`No se indexó #${p.code || p.id}: ${err?.message || 'error'}`);
+      }
+    }
+    return { faces, errors, scanned: missing.length };
   }
 
   async function publishEvent() {
@@ -885,12 +919,20 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         album = data;
       }
 
+      // backfill: cualquier foto ya en el álbum sin caras
+      const bf = await backfillMissingFaceIndex();
+      faces += bf.faces;
+      errors += bf.errors;
+
       fillForm();
       const parts = ['Evento guardado'];
       if (uploaded) parts.push(`${uploaded} foto(s) subidas`);
       if (faces) parts.push(`${faces} cara(s) indexadas`);
-      else if (uploaded && album?.search_by_face !== false) {
-        parts.push('sin caras indexadas (búsqueda por selfie no va a matchear todavía)');
+      if (bf.scanned && !bf.faces && !bf.errors) {
+        parts.push('todas las fotos ya tenían caras indexadas');
+      }
+      if (bf.scanned && bf.errors) {
+        parts.push(`${bf.errors}/${bf.scanned} pendientes de índice`);
       }
       if (album?.published) parts.push('publicado en la tienda');
       else parts.push('sigue en borrador');
@@ -902,7 +944,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       if (uploadStatus) {
         setTimeout(() => {
           uploadStatus.hidden = true;
-        }, 2000);
+        }, 2500);
       }
       setBusy(false);
       syncPublishEnabled();
