@@ -302,17 +302,20 @@ import site from '../../data/site.json';
   function readAlbumMessagesFromForm() {
     /** @type {Record<string, string>} */
     const by_id = {};
-    albumMsgList?.querySelectorAll('[data-album-msg-id]').forEach((el) => {
-      const id = el.getAttribute('data-album-msg-id');
+    // leer desde el form vivo (no del state previo)
+    const rootList = root?.querySelector('[data-album-msg-list]') || albumMsgList;
+    rootList?.querySelectorAll('[data-album-msg-id]').forEach((el) => {
+      const id = String(el.getAttribute('data-album-msg-id') || '').trim();
       const msg = String(/** @type {HTMLTextAreaElement} */ (el).value || '').trim();
       if (id && msg) by_id[id] = msg;
     });
+    const defEl = root?.querySelector('[data-album-msg-default]') || albumMsgDefault;
     albumMessages = normalizeAlbumMessages(
       {
-        default: String(albumMsgDefault?.value || '').trim() || DEFAULT_ALBUM_MESSAGE,
+        default: String(defEl?.value || '').trim() || DEFAULT_ALBUM_MESSAGE,
         by_id,
       },
-      { default: DEFAULT_ALBUM_MESSAGE },
+      { default: DEFAULT_ALBUM_MESSAGE, by_id: {} },
     );
     return albumMessages;
   }
@@ -336,8 +339,10 @@ import site from '../../data/site.json';
         <label>Slug (URL)
           <input data-f="slug" value="${escapeHtml(p.slug || '')}" maxlength="80" />
         </label>
-        <label>Año
-          <input data-f="year" type="number" value="${escapeHtml(String(p.year || ''))}" />
+        <label>Año (opcional)
+          <input data-f="year" type="text" inputmode="numeric" maxlength="12" placeholder="Vacío = no se muestra" value="${escapeHtml(
+            p.year != null && String(p.year).trim() !== '' ? String(p.year) : '',
+          )}" />
         </label>
         <label>Cover
           <div class="admin-thumb-row">
@@ -381,7 +386,14 @@ import site from '../../data/site.json';
     if (!slug && title) slug = slugify(title);
     p.title = title;
     p.slug = slugify(slug || title);
-    p.year = Number(card.querySelector('[data-f="year"]')?.value) || new Date().getFullYear();
+    // vacío = sin año (no rellenar 2026)
+    const yearRaw = card.querySelector('[data-f="year"]')?.value;
+    p.year =
+      yearRaw == null || String(yearRaw).trim() === ''
+        ? ''
+        : Number.isFinite(Number(yearRaw)) && String(yearRaw).trim() !== ''
+          ? Number(yearRaw)
+          : String(yearRaw).trim();
     p.href = `/proyecto/${p.slug}`;
   }
 
@@ -522,8 +534,18 @@ import site from '../../data/site.json';
       if (!pfRow?.key) throw new Error('No se confirmó el guardado del portafolio');
 
       // merge formats + album messages into storefront (keep transfer etc.)
+      // re-leer storefront fresco para no pisar transfer con state viejo
+      let baseStore = storefront && typeof storefront === 'object' ? { ...storefront } : {};
+      try {
+        const { data: liveRow } = await sb.from('settings').select('value').eq('key', 'storefront').maybeSingle();
+        if (liveRow?.value && typeof liveRow.value === 'object') {
+          baseStore = { ...liveRow.value };
+        }
+      } catch (_) {
+        /* keep local */
+      }
       const nextStore = {
-        ...(storefront && typeof storefront === 'object' ? storefront : {}),
+        ...baseStore,
         formats: formatsPayload,
         album_messages: albumMsgPayload,
       };
@@ -537,21 +559,29 @@ import site from '../../data/site.json';
           },
           { onConflict: 'key' },
         )
-        .select('key, updated_at')
+        .select('key, value, updated_at')
         .single();
       if (sErr) throw sErr;
       if (!stRow?.key) throw new Error('No se confirmó el guardado de textos de tienda');
 
-      storefront = nextStore;
+      // confirmar by_id desde lo persistido (no confiar solo en el payload local)
+      const savedMsgs = normalizeAlbumMessages(stRow.value?.album_messages, {
+        default: DEFAULT_ALBUM_MESSAGE,
+        by_id: {},
+      });
+      storefront = stRow.value && typeof stRow.value === 'object' ? stRow.value : nextStore;
       formats = formatsPayload;
-      albumMessages = albumMsgPayload;
+      albumMessages = savedMsgs;
       content = payload;
       fillAbout();
       fillFormats();
       fillAlbumMessages();
       renderProjects();
       const when = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      showOk(`✓ Guardado a las ${when}. Ya está en la web (hard refresh si no lo ves).`);
+      const nOwn = Object.keys(savedMsgs.by_id || {}).length;
+      showOk(
+        `✓ Guardado a las ${when}. Mensajes propios: ${nOwn}. Ya está en la web (hard refresh si no lo ves).`,
+      );
       setSaveBusy(false, '✓ Guardado');
     } catch (err) {
       console.error('portfolio save', err);
