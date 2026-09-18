@@ -38,19 +38,13 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
               <input name="date_label" maxlength="80" />
             </label>
           </div>
-          <div class="admin-grid-2">
-            <label>
-              Tipo
-              <select name="kind">
-                <option value="event">Evento</option>
-                <option value="portfolio">Portafolio</option>
-              </select>
-            </label>
-            <label>
-              Precio unitario (ARS)
-              <input name="photo_price_ars" type="number" min="0" step="100" required />
-            </label>
-          </div>
+          <label>
+            Tipo
+            <select name="kind">
+              <option value="event">Evento</option>
+              <option value="portfolio">Portafolio</option>
+            </select>
+          </label>
           <label>
             Mensaje al comprador
             <textarea name="message" maxlength="500"></textarea>
@@ -69,9 +63,13 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       <div class="admin-card">
         <h2 class="admin-section-title">2. Precios y packs</h2>
         <p class="admin-muted" style="margin-top:0">
-          Unitario = 1 foto (arriba). Packs: precio total del combo. Podés guardar solo
-          esto acá, o todo junto con <strong>Subir evento</strong>.
+          El precio de <strong>1 foto</strong> es el que sale en el panel y en la tienda.
+          Los packs son precio total del combo. Guardá acá o con <strong>Subir evento</strong>.
         </p>
+        <label style="display:block; margin-bottom:0.85rem; max-width:16rem">
+          Precio 1 foto (ARS)
+          <input data-unit-price type="number" min="0" step="100" required />
+        </label>
         <div class="admin-tiers" data-tiers></div>
         <div class="admin-actions" style="margin-top:0.75rem">
           <button type="button" class="admin-btn admin-btn--ghost" data-add-tier>Agregar pack</button>
@@ -160,6 +158,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   const titleEl = root?.querySelector('[data-title]');
   const subEl = root?.querySelector('[data-sub]');
   const form = root?.querySelector('[data-form-meta]');
+  const unitPriceInput = root?.querySelector('[data-unit-price]');
   const tiersEl = root?.querySelector('[data-tiers]');
   const photosEl = root?.querySelector('[data-photos]');
   const photosEmpty = root?.querySelector('[data-photos-empty]');
@@ -523,13 +522,35 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     return next;
   }
 
+  function readUnitPrice() {
+    const raw = unitPriceInput?.value ?? form?.photo_price_ars?.value ?? album?.photo_price_ars ?? 0;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  }
+
+  /**
+   * Keep photo_price_ars aligned with pack qty=1 (or create it).
+   * Admin list + storefront read photo_price_ars.
+   */
+  function syncTiersWithUnit(unit, tiers) {
+    const u = Math.max(0, Number(unit) || 0);
+    let list = Array.isArray(tiers) ? tiers.map((t) => ({ ...t })) : [];
+    const one = list.find((t) => Number(t.quantity) === 1);
+    if (one) one.price = u;
+    else list.unshift({ quantity: 1, price: u });
+    list = list
+      .filter((t) => Number(t.quantity) >= 1 && Number(t.price) >= 0)
+      .sort((a, b) => a.quantity - b.quantity);
+    return list;
+  }
+
   function defaultTiers(unit = 5000) {
     const u = Math.max(0, Number(unit) || 5000);
     return [
       { quantity: 1, price: u },
-      { quantity: 3, price: u * 2 },
-      { quantity: 5, price: u * 3 },
-      { quantity: 10, price: u * 5 },
+      { quantity: 3, price: Math.round(u * 2.5) },
+      { quantity: 5, price: Math.round(u * 4) },
+      { quantity: 10, price: Math.round(u * 7) },
     ];
   }
 
@@ -574,10 +595,10 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     form.slug.value = album.slug || '';
     form.date_label.value = album.date_label || '';
     form.kind.value = album.kind === 'portfolio' ? 'portfolio' : 'event';
-    form.photo_price_ars.value = album.photo_price_ars ?? 5000;
     form.message.value = album.message || '';
     form.search_by_face.checked = album.search_by_face !== false;
     form.published.checked = Boolean(album.published);
+    if (unitPriceInput) unitPriceInput.value = album.photo_price_ars ?? 5000;
     if (titleEl) titleEl.textContent = album.name || 'Evento';
     if (subEl) {
       const q = queue.length ? ` · ${queue.length} en cola` : '';
@@ -691,13 +712,14 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     const name = String(fd.get('name') || '').trim();
     const slug = String(fd.get('slug') || '').trim();
     if (!name || !slug) throw new Error('Completá nombre y slug');
-    const price_tiers = readTiers();
+    const unit = readUnitPrice();
+    const price_tiers = syncTiersWithUnit(unit, readTiers());
     const payload = {
       name,
       slug,
       date_label: String(fd.get('date_label') || '').trim() || null,
       kind: String(fd.get('kind') || 'event') === 'portfolio' ? 'portfolio' : 'event',
-      photo_price_ars: Number(fd.get('photo_price_ars') || 0),
+      photo_price_ars: unit,
       message: String(fd.get('message') || '').trim() || null,
       search_by_face: fd.get('search_by_face') === 'on',
       published: fd.get('published') === 'on',
@@ -897,7 +919,8 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   }
 
   root?.querySelector('[data-add-tier]')?.addEventListener('click', () => {
-    tiersEl?.appendChild(tierRow(3, Math.max((album?.photo_price_ars || 5000) * 2, 10000)));
+    const unit = readUnitPrice() || album?.photo_price_ars || 5000;
+    tiersEl?.appendChild(tierRow(3, Math.max(Math.round(unit * 2.5), unit + 1000)));
   });
 
   root?.querySelector('[data-save-prices]')?.addEventListener('click', async () => {
@@ -905,8 +928,8 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     showError('');
     showOk('');
     try {
-      const unit = Number(form?.photo_price_ars?.value || album?.photo_price_ars || 0);
-      const price_tiers = readTiers();
+      const unit = readUnitPrice();
+      const price_tiers = syncTiersWithUnit(unit, readTiers());
       const sb = getSupabase();
       const { data, error } = await sb
         .from('albums')
@@ -921,10 +944,27 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       if (error) throw error;
       album = data;
       fillForm();
-      showOk('Precios y packs guardados');
+      showOk(`Precios guardados · 1 foto ${formatArs(unit)}`);
     } catch (err) {
       showError(err?.message || 'No se pudieron guardar los precios');
     }
+  });
+
+  // if they edit unit price, mirror into pack qty=1 in the UI
+  unitPriceInput?.addEventListener('change', () => {
+    const unit = readUnitPrice();
+    const rows = [...(tiersEl?.querySelectorAll('.admin-tier-row') || [])];
+    let found = false;
+    for (const row of rows) {
+      const qty = Number(row.querySelector('[name="qty"]')?.value || 0);
+      if (qty === 1) {
+        const priceInput = row.querySelector('[name="price"]');
+        if (priceInput) priceInput.value = String(unit);
+        found = true;
+        break;
+      }
+    }
+    if (!found && tiersEl) tiersEl.prepend(tierRow(1, unit));
   });
 
   root?.querySelector('[data-delete-album]')?.addEventListener('click', async () => {
