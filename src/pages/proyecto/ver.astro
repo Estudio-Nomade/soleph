@@ -70,7 +70,11 @@ import site from '../../data/site.json';
       }
       document.title = `${project.title} - Sole Yaquinta`;
       if (titleEl) titleEl.textContent = project.title;
-      if (yearEl) yearEl.textContent = project.year ? String(project.year) : '';
+      if (yearEl) {
+        const y = project.year != null && String(project.year).trim() !== '' ? String(project.year) : '';
+        yearEl.textContent = y;
+        yearEl.hidden = !y;
+      }
       if (gallery) {
         gallery.innerHTML = (project.images || [])
           .map(

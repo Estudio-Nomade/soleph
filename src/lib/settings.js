@@ -124,10 +124,10 @@ export function normalizeAlbumMessages(raw, fallback = {}) {
 
 /**
  * Resuelve el mensaje a mostrar para un álbum de tienda.
- * - by_id[id] siempre gana (texto propio desde admin Portafolio)
+ * - by_id[id|slug|…] siempre gana (texto propio desde admin Portafolio)
  * - preferOwn=true (eventos live): message del álbum en SB → default storefront
  * - preferOwn=false (series estáticas site.json): default storefront → message seed
- * @param {string} albumId
+ * @param {string|string[]} albumId id o lista de claves a probar (id, slug, …)
  * @param {{ default?: string, by_id?: Record<string, string> }|null|undefined} albumMessages
  * @param {string|null|undefined} albumOwnMessage
  * @param {string} [fallback]
@@ -141,9 +141,14 @@ export function resolveAlbumMessage(
   opts = {},
 ) {
   const preferOwn = !!opts.preferOwn;
-  const id = String(albumId || '').trim();
-  const map = albumMessages?.by_id || {};
-  if (id && map[id]) return String(map[id]).trim();
+  const keys = (Array.isArray(albumId) ? albumId : [albumId])
+    .map((k) => String(k || '').trim())
+    .filter(Boolean);
+  const map = albumMessages?.by_id && typeof albumMessages.by_id === 'object' ? albumMessages.by_id : {};
+  for (const id of keys) {
+    const hit = map[id];
+    if (hit != null && String(hit).trim()) return String(hit).trim();
+  }
 
   const own = String(albumOwnMessage || '').trim();
   const def = String(albumMessages?.default || '').trim();

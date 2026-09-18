@@ -250,17 +250,12 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             album_messages: { default: DEFAULT_ALBUM_MESSAGE },
           });
           msg = resolveAlbumMessage(
-            album.slug || album.id,
+            [album.slug, album.id].filter(Boolean),
             store.album_messages,
             album.message,
             'Elegí las fotos y agregalas al carrito.',
             { preferOwn: true },
           );
-          // también probar por uuid por si el override se guardó con id live
-          if (album.id && album.slug && album.id !== album.slug) {
-            const byUuid = store.album_messages?.by_id?.[album.id];
-            if (byUuid) msg = byUuid;
-          }
         } catch (_) {
           /* keep album.message */
         }

@@ -81,20 +81,21 @@ import site from '../data/site.json';
       const seed = portfolioFallbackFromSite(window.__SOLEPH_SITE_SEED__ || {});
       const content = await loadPortfolioContent(seed);
       if (intro && content.trabajos_intro) intro.textContent = content.trabajos_intro;
-      const aboutYear = new Date().getFullYear();
       const cards = content.projects
-        .map(
-          (p) => `
+        .map((p) => {
+          const year =
+            p.year != null && String(p.year).trim() !== '' ? String(p.year).trim() : '';
+          return `
         <a class="work-card" href="/proyecto/ver?slug=${encodeURIComponent(p.slug)}">
           <img class="cover" src="${escapeHtml(p.cover)}" alt="${escapeHtml(
             p.title,
           )}" loading="lazy" decoding="async" width="1200" height="900" />
           <div class="meta">
             <div class="title">${escapeHtml(p.title)}</div>
-            <div class="year">${escapeHtml(String(p.year || ''))}</div>
+            ${year ? `<div class="year">${escapeHtml(year)}</div>` : ''}
           </div>
-        </a>`,
-        )
+        </a>`;
+        })
         .join('');
       const aboutCard = `
         <a class="work-card" href="/sobre-mi">
@@ -103,7 +104,6 @@ import site from '../data/site.json';
           )}" alt="Sobre mí" loading="lazy" decoding="async" width="1200" height="900" />
           <div class="meta">
             <div class="title">${escapeHtml(content.about.title || 'Sobre mí')}</div>
-            <div class="year">${aboutYear}</div>
           </div>
         </a>`;
       grid.innerHTML = cards + aboutCard;

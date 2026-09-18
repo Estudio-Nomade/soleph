@@ -101,12 +101,14 @@ const currency = site.shop.currencySymbol;
               class="album-card album-card--compact"
               href={`/tienda/${album.id}`}
               data-album-name={`${album.name} ${album.date_label || ''}`.toLowerCase()}
+              data-portfolio-id={album.id}
             >
               <img src={album.cover} alt={album.name} loading="lazy" width="800" height="500" />
               <div class="body">
                 <h3>{album.name}</h3>
-                <div class="meta">
-                  {album.date_label} · {album.photo_count || album.photos.length} fotos
+                <div class="meta" data-album-meta>
+                  {album.date_label ? `${album.date_label} · ` : ''}
+                  {album.photo_count || album.photos.length} fotos
                 </div>
                 <div class="price-pill">
                   desde {currency}
@@ -130,6 +132,7 @@ const currency = site.shop.currencySymbol;
   import { isSupabaseConfigured } from '../lib/supabase.js';
   import { listPublishedAlbums } from '../lib/shop-live.js';
   import { loadStorefrontSettings, DEFAULT_PRICING } from '../lib/settings.js';
+  import { loadPortfolioContent, portfolioFallbackFromSite } from '../lib/portfolio.js';
 
   const currency = window.__SOLEPH_CURRENCY__ || '$';
   const liveGrid = document.querySelector('[data-live-events]');
@@ -160,21 +163,27 @@ const currency = site.shop.currencySymbol;
       });
   }
 
+  function formatMeta(dateLabel, count) {
+    const date = dateLabel != null && String(dateLabel).trim() !== '' ? String(dateLabel).trim() : '';
+    const n = Number(count) || 0;
+    return date ? `${date} · ${n} fotos` : `${n} fotos`;
+  }
+
   function cardHtml(album, { compact = false } = {}) {
     const name = escapeHtml(album.name || '');
-    const date = escapeHtml(album.date_label || '');
+    const date = album.date_label != null && String(album.date_label).trim() !== '' ? String(album.date_label).trim() : '';
     const count = Number(album.photo_count) || 0;
     const price = Number(album.photo_price_ars || album.photo_price || 0);
     const cover = escapeHtml(album.cover || '/images/logo.png');
     const href = `/tienda/evento?id=${encodeURIComponent(album.id)}`;
-    const filter = `${album.name || ''} ${album.date_label || ''}`.toLowerCase();
+    const filter = `${album.name || ''} ${date}`.toLowerCase();
     const kind = album.kind === 'portfolio' ? 'portfolio' : 'event';
     const cls = compact ? 'album-card album-card--compact' : 'album-card';
     return `<a class="${cls}" href="${href}" data-album-name="${escapeHtml(filter)}" data-live="1" data-live-kind="${kind}">
       <img src="${cover}" alt="${name}" loading="lazy" width="${compact ? 800 : 1000}" height="${compact ? 500 : 625}" />
       <div class="body">
         <h3>${name}</h3>
-        <div class="meta">${date}${date ? ' · ' : ''}${count} fotos</div>
+        <div class="meta">${escapeHtml(formatMeta(date, count))}</div>
         <div class="price-pill">desde ${currency}${price.toLocaleString('es-AR')}</div>
       </div>
     </a>`;
@@ -199,17 +208,46 @@ const currency = site.shop.currencySymbol;
   /**
    * Portafolio vendible desde SB (kind=portfolio).
    * Si hay live, reemplaza el seed de site.json: borrar en admin = desaparece de la tienda.
-   * Si no hay ninguno, se deja el seed estático (series demo).
+   * Si no hay ninguno, se deja el seed estático (series demo) y se hidrata el año desde settings.portfolio.
    */
   async function hydrateLivePortfolio() {
     if (!isSupabaseConfigured() || !portfolioGrid) return;
     try {
       const live = await listPublishedAlbums({ kind: 'portfolio' });
-      if (!live.length) return;
-      portfolioGrid.innerHTML = live.map((a) => cardHtml(a, { compact: true })).join('');
-      bindFilter();
+      if (live.length) {
+        portfolioGrid.innerHTML = live.map((a) => cardHtml(a, { compact: true })).join('');
+        bindFilter();
+        return;
+      }
+      // seed estático: año desde CMS portafolio (puede estar vacío)
+      await hydrateStaticPortfolioYears();
     } catch (err) {
       console.warn('live portfolio', err);
+    }
+  }
+
+  async function hydrateStaticPortfolioYears() {
+    if (!portfolioGrid) return;
+    try {
+      const seed = portfolioFallbackFromSite(window.__SOLEPH_SITE_SEED__ || {});
+      const content = await loadPortfolioContent(seed);
+      const bySlug = Object.fromEntries((content.projects || []).map((p) => [p.slug, p]));
+      portfolioGrid.querySelectorAll('[data-portfolio-id]').forEach((card) => {
+        const id = card.getAttribute('data-portfolio-id');
+        const proj = bySlug[id];
+        if (!proj) return;
+        const meta = card.querySelector('[data-album-meta]');
+        const countMatch = (meta?.textContent || '').match(/(\d+)\s*fotos/);
+        const count = countMatch ? Number(countMatch[1]) : 0;
+        const year =
+          proj.year != null && String(proj.year).trim() !== '' ? String(proj.year).trim() : '';
+        if (meta) meta.textContent = formatMeta(year, count);
+        const filter = `${card.querySelector('h3')?.textContent || ''} ${year}`.toLowerCase();
+        card.setAttribute('data-album-name', filter);
+      });
+      bindFilter();
+    } catch (err) {
+      console.warn('static portfolio years', err);
     }
   }
 

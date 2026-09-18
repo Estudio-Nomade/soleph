@@ -32,9 +32,11 @@ const initialMessage =
   <main class="page">
     <header class="page-header">
       <h1>{album.name}</h1>
-      <p>
-        {isPortfolio ? 'Portafolio · ' : 'Evento · '}
-        {album.date_label} · {album.photos.length} fotos
+      <p data-album-sub>
+        {isPortfolio ? 'Portafolio' : 'Evento'}
+        {album.date_label ? ` · ${album.date_label}` : ''}
+        {' · '}
+        {album.photos.length} fotos
       </p>
     </header>
 
@@ -128,6 +130,7 @@ const initialMessage =
     DEFAULT_ALBUM_MESSAGE,
     DEFAULT_PRICING,
   } from '../../lib/settings.js';
+  import { loadPortfolioContent, portfolioFallbackFromSite } from '../../lib/portfolio.js';
   import { bindPhotoGrid, ensureSelectBar } from '../../scripts/shop-select.js';
   import { patchCartAlbumPricing } from '../../scripts/cart.js';
 
@@ -167,20 +170,67 @@ const initialMessage =
     }
   }
 
-  // hydrate message + shared pricing (mismo que eventos)
+  function paintAlbumSub(dateLabel, photoCount, isPortfolio) {
+    const sub = document.querySelector('[data-album-sub]');
+    if (!sub) return;
+    const kind = isPortfolio ? 'Portafolio' : 'Evento';
+    const date = dateLabel != null && String(dateLabel).trim() !== '' ? ` · ${String(dateLabel).trim()}` : '';
+    const n = Number(photoCount) || 0;
+    sub.textContent = `${kind}${date} · ${n} fotos`;
+  }
+
+  // hydrate message + year + shared pricing
   (async () => {
     const el = document.querySelector('[data-album-message]');
     const albumId = window.__SOLEPH_ALBUM_ID__ || '';
     const own = window.__SOLEPH_ALBUM_MESSAGE__ || '';
+    const seedAlbums =
+      typeof window !== 'undefined' && Array.isArray(window.__SOLEPH_SHOP_ALBUMS__)
+        ? window.__SOLEPH_SHOP_ALBUMS__
+        : [];
+    const seedAlbum = seedAlbums.find((a) => String(a?.id) === String(albumId));
+    const isPortfolio = !seedAlbum || seedAlbum.kind === 'portfolio';
+    const photoCount = Array.isArray(seedAlbum?.photos)
+      ? seedAlbum.photos.length
+      : Number(seedAlbum?.photo_count) || 0;
+
     try {
       const store = await loadStorefrontSettings({
-        album_messages: { default: DEFAULT_ALBUM_MESSAGE },
+        album_messages: { default: DEFAULT_ALBUM_MESSAGE, by_id: {} },
         pricing: DEFAULT_PRICING,
       });
+
+      // texto propio (by_id) siempre gana sobre seed/default
       if (el && isSupabaseConfigured()) {
-        const msg = resolveAlbumMessage(albumId, store.album_messages, own, DEFAULT_ALBUM_MESSAGE);
+        const msg = resolveAlbumMessage(
+          [albumId, seedAlbum?.slug, seedAlbum?.id].filter(Boolean),
+          store.album_messages,
+          own,
+          DEFAULT_ALBUM_MESSAGE,
+          { preferOwn: false },
+        );
         if (msg) el.textContent = msg;
       }
+
+      // año/fecha desde settings.portfolio (mismo CMS de Trabajos)
+      let dateLabel = seedAlbum?.date_label || '';
+      try {
+        const seed = portfolioFallbackFromSite(window.__SOLEPH_SITE_SEED__ || {});
+        const content = await loadPortfolioContent(seed);
+        const proj =
+          content.projects.find((p) => p.slug === albumId) ||
+          content.projects.find(
+            (p) => String(p.title).toLowerCase() === String(seedAlbum?.name || '').toLowerCase(),
+          );
+        if (proj) {
+          // year vacío = sin fecha en tienda
+          dateLabel = proj.year != null && String(proj.year).trim() !== '' ? String(proj.year) : '';
+        }
+      } catch (err) {
+        console.warn('album year hydrate', err);
+      }
+      paintAlbumSub(dateLabel, photoCount, isPortfolio);
+
       if (store.pricing?.photo_price) {
         applyPricing(store.pricing.photo_price, store.pricing.price_tiers);
       }

@@ -31,6 +31,29 @@ export const PORTFOLIO_SETTINGS_KEY = 'portfolio';
  */
 
 /**
+ * Año del proyecto. Vacío permitido (Sole puede borrar 2026).
+ * No rellenar con el año actual si mandaron '' / null.
+ * @param {any} raw
+ * @param {{ defaultIfMissing?: boolean }} [opts]
+ * @returns {string|number}
+ */
+export function normalizeProjectYear(raw, opts = {}) {
+  if (raw === null || raw === undefined) {
+    return opts.defaultIfMissing ? new Date().getFullYear() : '';
+  }
+  if (typeof raw === 'string' && raw.trim() === '') return '';
+  if (typeof raw === 'number' && !Number.isFinite(raw)) return '';
+  const s = String(raw).trim();
+  if (!s) return '';
+  // "2026" o 2026 → number si es entero; si no, texto libre
+  if (/^\d{1,4}$/.test(s)) {
+    const n = Number(s);
+    return Number.isFinite(n) ? n : s;
+  }
+  return s;
+}
+
+/**
  * @param {Partial<PortfolioContent>|null|undefined} raw
  * @param {PortfolioContent} fallback
  * @returns {PortfolioContent}
@@ -38,6 +61,8 @@ export const PORTFOLIO_SETTINGS_KEY = 'portfolio';
 export function normalizePortfolio(raw, fallback) {
   const fb = fallback || { about: {}, projects: [] };
   const aboutIn = raw?.about && typeof raw.about === 'object' ? raw.about : {};
+  // array vacío es válido (no volver al seed)
+  const hasProjectsKey = raw && Object.prototype.hasOwnProperty.call(raw, 'projects');
   const projectsIn = Array.isArray(raw?.projects) ? raw.projects : null;
 
   const about = {
@@ -48,7 +73,7 @@ export function normalizePortfolio(raw, fallback) {
 
   /** @type {PortfolioProject[]} */
   let projects;
-  if (projectsIn && projectsIn.length) {
+  if (hasProjectsKey && projectsIn) {
     projects = projectsIn
       .map((p) => normalizeProject(p))
       .filter((p) => p.slug && p.title);
@@ -59,7 +84,11 @@ export function normalizePortfolio(raw, fallback) {
   return {
     about,
     projects,
-    trabajos_intro: String(raw?.trabajos_intro || fb.trabajos_intro || 'Selección de proyectos y series.'),
+    trabajos_intro: String(
+      raw?.trabajos_intro != null && String(raw.trabajos_intro).trim() !== ''
+        ? raw.trabajos_intro
+        : fb.trabajos_intro || 'Selección de proyectos y series.',
+    ),
   };
 }
 
@@ -77,7 +106,8 @@ export function normalizeProject(p) {
     ? p.images.map((x) => String(x || '').trim()).filter(Boolean)
     : [];
   const title = String(p?.title || '').trim() || slug;
-  const year = p?.year != null && p?.year !== '' ? p.year : new Date().getFullYear();
+  // año vacío se respeta (no forzar getFullYear)
+  const year = normalizeProjectYear(p?.year, { defaultIfMissing: false });
   const cover = String(p?.cover || images[0] || '/images/logo.png').trim();
   return {
     slug,
