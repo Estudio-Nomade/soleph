@@ -158,11 +158,14 @@ export async function searchAlbumBySelfie({
     previewUrl: publicStorageUrl(BUCKETS.previews, row.previewPath),
   }));
 
+  const msg = String(json.message || '');
+  const notIndexed = /sin caras indexadas|ResourceNotFound|no faces indexed/i.test(msg);
+
   // Edge may return empty matches but ok if no faces in selfie
   if (!matches.length && !json.photoIds?.length) {
     // distinguish "no face in selfie" vs "no match" when possible
     if (json.searchedFaceConfidence != null && json.searchedFaceConfidence < 70) {
-      return { photoIds: [], matches: [], noFace: true };
+      return { photoIds: [], matches: [], noFace: true, notIndexed: false };
     }
   }
 
@@ -170,6 +173,8 @@ export async function searchAlbumBySelfie({
     photoIds: json.photoIds || matches.map((m) => m.photoId),
     matches,
     noFace: false,
+    notIndexed,
+    message: msg || '',
     album: json.album,
     engine: 'rekognition',
   };

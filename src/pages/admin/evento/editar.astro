@@ -821,8 +821,18 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
             });
             faces += faceRes.faces || 0;
             row._faces = faceRes.faces;
+            if (!faceRes.faces) {
+              // no faces found in this frame — not a hard error
+              console.info('face index 0 faces', row.id);
+            }
           } catch (faceErr) {
+            errors += 1;
             console.warn('face index', faceErr);
+            showError(
+              `Foto subida, pero no se indexaron caras (${file.name}): ${
+                faceErr?.message || 'error'
+              }`,
+            );
           }
         }
 
@@ -879,6 +889,9 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       const parts = ['Evento guardado'];
       if (uploaded) parts.push(`${uploaded} foto(s) subidas`);
       if (faces) parts.push(`${faces} cara(s) indexadas`);
+      else if (uploaded && album?.search_by_face !== false) {
+        parts.push('sin caras indexadas (búsqueda por selfie no va a matchear todavía)');
+      }
       if (album?.published) parts.push('publicado en la tienda');
       else parts.push('sigue en borrador');
       if (errors) parts.push(`${errors} con error`);
