@@ -10,8 +10,18 @@ export function getStaticPaths() {
 }
 
 const { album } = Astro.props;
-const unit = album.photo_price;
-const tiers = album.price_tiers;
+const seedPricing = site.shop.pricing || {
+  photo_price: 3500,
+  price_tiers: [
+    { quantity: 1, price: 3500 },
+    { quantity: 3, price: 9000 },
+    { quantity: 5, price: 13000 },
+    { quantity: 10, price: 23000 },
+  ],
+};
+// mismo listado de precios que eventos (no un seed viejo de 5000)
+const unit = Number(seedPricing.photo_price) || Number(album.photo_price) || 3500;
+const tiers = Array.isArray(seedPricing.price_tiers) ? seedPricing.price_tiers : album.price_tiers || [];
 const isPortfolio = album.kind === 'portfolio';
 const initialMessage =
   album.message ||
@@ -30,14 +40,16 @@ const initialMessage =
 
     <div class="album-top">
       <p class="lead" data-album-message>{initialMessage}</p>
-      <div class="price-tiers" aria-label="Precios">
-        <span>1 foto · ${unit.toLocaleString('es-AR')}</span>
+      <div class="price-tiers" aria-label="Precios" data-price-tiers>
+        <span data-tier-unit>1 foto · ${unit.toLocaleString('es-AR')}</span>
         {
-          tiers.map((t) => (
-            <span>
-              {t.quantity} fotos · ${t.price.toLocaleString('es-AR')}
-            </span>
-          ))
+          tiers
+            .filter((t) => Number(t.quantity) !== 1)
+            .map((t) => (
+              <span>
+                {t.quantity} fotos · ${t.price.toLocaleString('es-AR')}
+              </span>
+            ))
         }
       </div>
     </div>
@@ -110,23 +122,70 @@ const initialMessage =
 
 <script>
   import { isSupabaseConfigured } from '../../lib/supabase.js';
-  import { loadStorefrontSettings, resolveAlbumMessage, DEFAULT_ALBUM_MESSAGE } from '../../lib/settings.js';
+  import {
+    loadStorefrontSettings,
+    resolveAlbumMessage,
+    DEFAULT_ALBUM_MESSAGE,
+    DEFAULT_PRICING,
+  } from '../../lib/settings.js';
   import { bindPhotoGrid, ensureSelectBar } from '../../scripts/shop-select.js';
+  import { patchCartAlbumPricing } from '../../scripts/cart.js';
 
-  // hydrate message from admin storefront settings (sin redeploy)
+  function paintTiers(unit, tiers) {
+    const box = document.querySelector('[data-price-tiers]');
+    if (!box) return;
+    const u = Number(unit) || 0;
+    const list = Array.isArray(tiers) ? tiers : [];
+    const bits = [`<span data-tier-unit>1 foto · $${u.toLocaleString('es-AR')}</span>`];
+    for (const t of list) {
+      if (Number(t.quantity) === 1) continue;
+      bits.push(`<span>${Number(t.quantity)} fotos · $${Number(t.price).toLocaleString('es-AR')}</span>`);
+    }
+    box.innerHTML = bits.join('');
+  }
+
+  function applyPricing(unit, tiers) {
+    const u = Number(unit) || 0;
+    const t = Array.isArray(tiers) ? tiers : [];
+    window.__SOLEPH_PRICE__ = { unitPrice: u, tiers: t, albumId: window.__SOLEPH_ALBUM_ID__ };
+    paintTiers(u, t);
+    document.querySelectorAll('[data-photo]').forEach((tile) => {
+      tile.setAttribute('data-unit', String(u));
+    });
+    const albumId = window.__SOLEPH_ALBUM_ID__;
+    if (albumId) patchCartAlbumPricing(albumId, { unitPrice: u });
+    // keep seed albums map in sync for cart fallback
+    const albums = window.__SOLEPH_SHOP_ALBUMS__;
+    if (Array.isArray(albums) && albumId) {
+      for (const a of albums) {
+        if (String(a.id) === String(albumId) || a.kind === 'portfolio') {
+          a.photo_price = u;
+          a.photo_price_ars = u;
+          a.price_tiers = t;
+        }
+      }
+    }
+  }
+
+  // hydrate message + shared pricing (mismo que eventos)
   (async () => {
     const el = document.querySelector('[data-album-message]');
     const albumId = window.__SOLEPH_ALBUM_ID__ || '';
     const own = window.__SOLEPH_ALBUM_MESSAGE__ || '';
-    if (!el || !isSupabaseConfigured()) return;
     try {
       const store = await loadStorefrontSettings({
         album_messages: { default: DEFAULT_ALBUM_MESSAGE },
+        pricing: DEFAULT_PRICING,
       });
-      const msg = resolveAlbumMessage(albumId, store.album_messages, own, DEFAULT_ALBUM_MESSAGE);
-      if (msg) el.textContent = msg;
+      if (el && isSupabaseConfigured()) {
+        const msg = resolveAlbumMessage(albumId, store.album_messages, own, DEFAULT_ALBUM_MESSAGE);
+        if (msg) el.textContent = msg;
+      }
+      if (store.pricing?.photo_price) {
+        applyPricing(store.pricing.photo_price, store.pricing.price_tiers);
+      }
     } catch (err) {
-      console.warn('album message', err);
+      console.warn('album hydrate', err);
     }
   })();
 

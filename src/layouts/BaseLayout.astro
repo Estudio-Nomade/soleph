@@ -35,8 +35,9 @@ const fullTitle = title === site.brand.name ? title : `${site.brand.name} - ${ti
     <meta property="og:description" content={description} />
     <meta property="og:image" content={ogImage} />
     <meta name="theme-color" content="#012B55" />
-    <script define:vars={{ shopAlbums: site.shop.albums }}>
+    <script define:vars={{ shopAlbums: site.shop.albums, seedPricing: site.shop.pricing || null }}>
       window.__SOLEPH_SHOP_ALBUMS__ = shopAlbums;
+      window.__SOLEPH_SEED_PRICING__ = seedPricing;
     </script>
   </head>
   <body id="top">
