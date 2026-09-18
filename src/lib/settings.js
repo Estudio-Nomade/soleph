@@ -27,6 +27,53 @@ const DEFAULT_FORMATS = {
 const DEFAULT_ALBUM_MESSAGE =
   'Alta resolución. Cuando confirmamos la transferencia por WhatsApp, te la mando por ahí.';
 
+/** Precios canónicos (mismos para eventos y portafolio seed). */
+const DEFAULT_PRICING = {
+  photo_price: 3500,
+  price_tiers: [
+    { quantity: 1, price: 3500 },
+    { quantity: 3, price: 9000 },
+    { quantity: 5, price: 13000 },
+    { quantity: 10, price: 23000 },
+  ],
+};
+
+/**
+ * @param {any} raw
+ * @param {typeof DEFAULT_PRICING} fallback
+ */
+export function normalizePricing(raw, fallback = DEFAULT_PRICING) {
+  const fb = fallback || DEFAULT_PRICING;
+  const tiersIn = Array.isArray(raw?.price_tiers)
+    ? raw.price_tiers
+    : Array.isArray(raw?.tiers)
+      ? raw.tiers
+      : fb.price_tiers;
+  const tiers = tiersIn
+    .map((t) => ({
+      quantity: Math.max(0, Math.floor(Number(t?.quantity) || 0)),
+      price: Math.max(0, Number(t?.price) || 0),
+    }))
+    .filter((t) => t.quantity > 0);
+  let unit = Math.max(0, Number(raw?.photo_price ?? raw?.photo_price_ars ?? fb.photo_price) || 0);
+  const one = tiers.find((t) => t.quantity === 1);
+  if (one && one.price > 0) unit = one.price;
+  if (!unit && fb.photo_price) unit = fb.photo_price;
+  const price_tiers =
+    tiers.length > 0
+      ? tiers
+      : [
+          ...(unit ? [{ quantity: 1, price: unit }] : []),
+          ...fb.price_tiers.filter((t) => t.quantity !== 1),
+        ];
+  // ensure qty=1 present
+  if (!price_tiers.some((t) => t.quantity === 1) && unit > 0) {
+    price_tiers.unshift({ quantity: 1, price: unit });
+  }
+  price_tiers.sort((a, b) => a.quantity - b.quantity);
+  return { photo_price: unit, price_tiers };
+}
+
 /**
  * @param {any} raw
  * @param {typeof DEFAULT_FORMATS} fallback
@@ -124,8 +171,8 @@ export async function loadTransferSettings(fallback = {}) {
 }
 
 /**
- * storefront settings: transfer + formats + album_messages (textos de tienda).
- * @param {{ transfer?: any, formats?: any, album_messages?: any }} fallback
+ * storefront settings: transfer + formats + album_messages + pricing.
+ * @param {{ transfer?: any, formats?: any, album_messages?: any, pricing?: any }} fallback
  */
 export async function loadStorefrontSettings(fallback = {}) {
   const baseTransfer = {
@@ -136,12 +183,14 @@ export async function loadStorefrontSettings(fallback = {}) {
   const baseAlbumMessages = normalizeAlbumMessages(fallback.album_messages, {
     default: DEFAULT_ALBUM_MESSAGE,
   });
+  const basePricing = normalizePricing(fallback.pricing, DEFAULT_PRICING);
 
   if (!isSupabaseConfigured()) {
     return {
       transfer: baseTransfer,
       formats: baseFormats,
       album_messages: baseAlbumMessages,
+      pricing: basePricing,
     };
   }
 
@@ -151,6 +200,32 @@ export async function loadStorefrontSettings(fallback = {}) {
     if (error) throw error;
     const value = data?.value && typeof data.value === 'object' ? data.value : {};
     const transferRaw = value.transfer && typeof value.transfer === 'object' ? value.transfer : {};
+
+    // pricing: storefront.pricing si existe; si no, primer álbum publicado live
+    let pricing = normalizePricing(value.pricing, basePricing);
+    if (!value.pricing) {
+      try {
+        const { data: albums } = await sb
+          .from('albums')
+          .select('photo_price_ars, price_tiers, published, updated_at')
+          .eq('published', true)
+          .order('updated_at', { ascending: false })
+          .limit(5);
+        const live = (albums || []).find((a) => Number(a.photo_price_ars) > 0);
+        if (live) {
+          pricing = normalizePricing(
+            {
+              photo_price: live.photo_price_ars,
+              price_tiers: live.price_tiers,
+            },
+            basePricing,
+          );
+        }
+      } catch {
+        /* keep base */
+      }
+    }
+
     return {
       transfer: {
         owner: transferRaw.owner || baseTransfer.owner || DEFAULT_TRANSFER.owner,
@@ -160,6 +235,7 @@ export async function loadStorefrontSettings(fallback = {}) {
       },
       formats: normalizeFormats(value.formats, baseFormats),
       album_messages: normalizeAlbumMessages(value.album_messages, baseAlbumMessages),
+      pricing,
       raw: value,
     };
   } catch (err) {
@@ -168,6 +244,7 @@ export async function loadStorefrontSettings(fallback = {}) {
       transfer: baseTransfer,
       formats: baseFormats,
       album_messages: baseAlbumMessages,
+      pricing: basePricing,
       raw: {},
     };
   }
@@ -182,9 +259,43 @@ export async function loadAlbumPrices(albumIds) {
   /** @type {Record<string, { unit: number, tiers: any[], name?: string }>} */
   const map = {};
   const ids = [...new Set((albumIds || []).map(String).filter(Boolean))];
-  if (!ids.length || !isSupabaseConfigured()) return map;
+  if (!ids.length) return map;
+
+  // seed estático (portafolio site.json)
+  const seedAlbums =
+    typeof window !== 'undefined' && Array.isArray(window.__SOLEPH_SHOP_ALBUMS__)
+      ? window.__SOLEPH_SHOP_ALBUMS__
+      : [];
+  const seedPricing =
+    typeof window !== 'undefined' && window.__SOLEPH_SEED_PRICING__
+      ? window.__SOLEPH_SEED_PRICING__
+      : null;
+
+  for (const id of ids) {
+    const seed = seedAlbums.find((a) => String(a?.id) === id);
+    if (seed) {
+      map[id] = {
+        unit: Number(seed.photo_price ?? seed.photo_price_ars) || Number(seedPricing?.photo_price) || 0,
+        tiers: Array.isArray(seed.price_tiers)
+          ? seed.price_tiers
+          : Array.isArray(seedPricing?.price_tiers)
+            ? seedPricing.price_tiers
+            : [],
+        name: seed.name,
+      };
+    } else if (seedPricing?.photo_price) {
+      // ids desconocidos (o seed sin match): usar pricing canónico compartido
+      map[id] = {
+        unit: Number(seedPricing.photo_price) || 0,
+        tiers: Array.isArray(seedPricing.price_tiers) ? seedPricing.price_tiers : [],
+      };
+    }
+  }
+
+  if (!isSupabaseConfigured()) return map;
   try {
     const sb = getSupabase();
+    // live albums by uuid
     const { data, error } = await sb
       .from('albums')
       .select('id, name, photo_price_ars, price_tiers, published')
@@ -197,10 +308,26 @@ export async function loadAlbumPrices(albumIds) {
         name: a.name,
       };
     }
+
+    // if still missing unit for static ids, pull shared live pricing once
+    const missing = ids.filter((id) => !map[id]?.unit);
+    if (missing.length) {
+      const store = await loadStorefrontSettings({
+        pricing: seedPricing || DEFAULT_PRICING,
+      });
+      const p = store.pricing;
+      for (const id of missing) {
+        map[id] = {
+          unit: Number(p.photo_price) || map[id]?.unit || 0,
+          tiers: Array.isArray(p.price_tiers) ? p.price_tiers : map[id]?.tiers || [],
+          name: map[id]?.name,
+        };
+      }
+    }
   } catch (err) {
     console.warn('loadAlbumPrices', err?.message || err);
   }
   return map;
 }
 
-export { DEFAULT_TRANSFER, DEFAULT_FORMATS, DEFAULT_ALBUM_MESSAGE };
+export { DEFAULT_TRANSFER, DEFAULT_FORMATS, DEFAULT_ALBUM_MESSAGE, DEFAULT_PRICING };

@@ -186,19 +186,23 @@
             "thumb": "/images/projects/paisajes/06.jpg"
           }
         ],
-        "photo_price": 5000,
+        "photo_price": 3500,
         "price_tiers": [
           {
+            "quantity": 1,
+            "price": 3500
+          },
+          {
             "quantity": 3,
-            "price": 10000
+            "price": 9000
           },
           {
             "quantity": 5,
-            "price": 15000
+            "price": 13000
           },
           {
             "quantity": 10,
-            "price": 25000
+            "price": 23000
           }
         ],
         "message": "Alta resolución. Cuando confirmamos la transferencia por WhatsApp, te la mando por ahí.",
@@ -279,19 +283,23 @@
             "thumb": "/images/projects/cordillera/13.jpg"
           }
         ],
-        "photo_price": 5000,
+        "photo_price": 3500,
         "price_tiers": [
           {
+            "quantity": 1,
+            "price": 3500
+          },
+          {
             "quantity": 3,
-            "price": 10000
+            "price": 9000
           },
           {
             "quantity": 5,
-            "price": 15000
+            "price": 13000
           },
           {
             "quantity": 10,
-            "price": 25000
+            "price": 23000
           }
         ],
         "message": "Alta resolución. Cuando confirmamos la transferencia por WhatsApp, te la mando por ahí.",
@@ -332,19 +340,23 @@
             "thumb": "/images/projects/pruebas-de-riendas/05.jpg"
           }
         ],
-        "photo_price": 5000,
+        "photo_price": 3500,
         "price_tiers": [
           {
+            "quantity": 1,
+            "price": 3500
+          },
+          {
             "quantity": 3,
-            "price": 10000
+            "price": 9000
           },
           {
             "quantity": 5,
-            "price": 15000
+            "price": 13000
           },
           {
             "quantity": 10,
-            "price": 25000
+            "price": 23000
           }
         ],
         "message": "Alta resolución. Cuando confirmamos la transferencia por WhatsApp, te la mando por ahí.",
@@ -430,19 +442,23 @@
             "thumb": "/images/projects/la-makeka/14.jpg"
           }
         ],
-        "photo_price": 5000,
+        "photo_price": 3500,
         "price_tiers": [
           {
+            "quantity": 1,
+            "price": 3500
+          },
+          {
             "quantity": 3,
-            "price": 10000
+            "price": 9000
           },
           {
             "quantity": 5,
-            "price": 15000
+            "price": 13000
           },
           {
             "quantity": 10,
-            "price": 25000
+            "price": 23000
           }
         ],
         "message": "Alta resolución. Cuando confirmamos la transferencia por WhatsApp, te la mando por ahí.",
@@ -450,6 +466,27 @@
         "search_by_number": false,
         "kind": "portfolio"
       }
-    ]
+    ],
+    "pricing": {
+      "photo_price": 3500,
+      "price_tiers": [
+        {
+          "quantity": 1,
+          "price": 3500
+        },
+        {
+          "quantity": 3,
+          "price": 9000
+        },
+        {
+          "quantity": 5,
+          "price": 13000
+        },
+        {
+          "quantity": 10,
+          "price": 23000
+        }
+      ]
+    }
   }
 }

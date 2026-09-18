@@ -121,19 +121,22 @@ const currency = site.shop.currencySymbol;
   </main>
 </BaseLayout>
 
-<script define:vars={{ currency }}>
+<script define:vars={{ currency, seedPricing: site.shop.pricing || { photo_price: 3500 } }}>
   window.__SOLEPH_CURRENCY__ = currency || '$';
+  window.__SOLEPH_SEED_PRICING__ = seedPricing;
 </script>
 
 <script>
   import { isSupabaseConfigured } from '../lib/supabase.js';
   import { listPublishedAlbums } from '../lib/shop-live.js';
+  import { loadStorefrontSettings, DEFAULT_PRICING } from '../lib/settings.js';
 
   const currency = window.__SOLEPH_CURRENCY__ || '$';
   const liveGrid = document.querySelector('[data-live-events]');
   const staticGrid = document.querySelector('[data-section="events-static"]');
   const empty = document.querySelector('[data-events-empty]');
   const input = document.querySelector('[data-album-filter]');
+  const portfolioGrid = document.querySelector('[data-section="portfolio"]');
 
   function escapeHtml(s) {
     return String(s)
@@ -141,6 +144,15 @@ const currency = site.shop.currencySymbol;
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;');
+  }
+
+  function paintPricePills(unit) {
+    const n = Number(unit) || 0;
+    if (!n) return;
+    const label = n.toLocaleString('es-AR');
+    document.querySelectorAll('[data-section="portfolio"] .price-pill, [data-section="events-static"] .price-pill').forEach((el) => {
+      el.textContent = `desde ${currency}${label}`;
+    });
   }
 
   function cardHtml(album) {
@@ -177,6 +189,30 @@ const currency = site.shop.currencySymbol;
     }
   }
 
+  async function hydrateSharedPricing() {
+    try {
+      const store = await loadStorefrontSettings({
+        pricing: window.__SOLEPH_SEED_PRICING__ || DEFAULT_PRICING,
+      });
+      const unit = Number(store.pricing?.photo_price) || 0;
+      if (unit) {
+        paintPricePills(unit);
+        window.__SOLEPH_SEED_PRICING__ = store.pricing;
+        // keep cart seed albums aligned
+        const albums = window.__SOLEPH_SHOP_ALBUMS__;
+        if (Array.isArray(albums)) {
+          for (const a of albums) {
+            a.photo_price = unit;
+            a.photo_price_ars = unit;
+            a.price_tiers = store.pricing.price_tiers;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('shared pricing', err);
+    }
+  }
+
   function bindFilter() {
     const cards = [...document.querySelectorAll('[data-album-name]')];
     input?.removeEventListener('input', onFilter);
@@ -192,7 +228,7 @@ const currency = site.shop.currencySymbol;
       if (empty && !liveGrid?.hidden) {
         const liveCards = cards.filter((c) => c.getAttribute('data-live') === '1');
         const any = liveCards.some((c) => c.style.display !== 'none');
-        empty.hidden = liveCards.length > 0 && ( !q || any);
+        empty.hidden = liveCards.length > 0 && (!q || any);
         if (liveCards.length && q && !any) {
           empty.hidden = false;
           empty.style.display = '';
@@ -202,5 +238,6 @@ const currency = site.shop.currencySymbol;
   }
 
   bindFilter();
+  hydrateSharedPricing();
   hydrateLiveEvents();
 </script>
