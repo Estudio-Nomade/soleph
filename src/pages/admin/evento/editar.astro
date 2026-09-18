@@ -53,10 +53,10 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
             <input type="checkbox" name="search_by_face" />
             Permitir “Buscar mis fotos” por cara
           </label>
-          <label class="admin-check">
-            <input type="checkbox" name="published" />
-            Publicar en la tienda al subir
-          </label>
+          <p class="admin-muted" data-publish-note style="margin:0">
+            Al tocar <strong>Subir evento</strong> el álbum queda publicado en la tienda.
+          </p>
+          <input type="hidden" name="published" value="on" />
         </form>
       </div>
 
@@ -597,14 +597,14 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     form.kind.value = album.kind === 'portfolio' ? 'portfolio' : 'event';
     form.message.value = album.message || '';
     form.search_by_face.checked = album.search_by_face !== false;
-    form.published.checked = Boolean(album.published);
+    // published is forced true on Subir evento (hidden input); keep note honest
     if (unitPriceInput) unitPriceInput.value = album.photo_price_ars ?? 5000;
     if (titleEl) titleEl.textContent = album.name || 'Evento';
     if (subEl) {
       const q = queue.length ? ` · ${queue.length} en cola` : '';
       subEl.textContent = album.published
         ? `Publicado · ${formatArs(album.photo_price_ars)} c/u${q}`
-        : `Borrador · ${formatArs(album.photo_price_ars)} c/u${q}`;
+        : `Borrador · ${formatArs(album.photo_price_ars)} c/u · Subir evento lo publica${q}`;
     }
     if (tiersEl) {
       renderTier(Array.isArray(album.price_tiers) ? album.price_tiers : []);
@@ -706,7 +706,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     }
   }
 
-  async function saveMetaAndTiers() {
+  async function saveMetaAndTiers({ publish = false } = {}) {
     if (!form) throw new Error('Falta el formulario');
     const fd = new FormData(form);
     const name = String(fd.get('name') || '').trim();
@@ -722,7 +722,8 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       photo_price_ars: unit,
       message: String(fd.get('message') || '').trim() || null,
       search_by_face: fd.get('search_by_face') === 'on',
-      published: fd.get('published') === 'on',
+      // Subir evento siempre publica; Guardar cambios (precios) no toca published
+      ...(publish ? { published: true } : {}),
       price_tiers,
       updated_at: new Date().toISOString(),
     };
@@ -849,7 +850,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     try {
       uploadStatus && (uploadStatus.hidden = false);
       uploadStatus && (uploadStatus.textContent = 'Guardando datos del evento…');
-      await saveMetaAndTiers();
+      await saveMetaAndTiers({ publish: true });
 
       let uploaded = 0;
       let faces = 0;
@@ -859,6 +860,19 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         uploaded = res.uploaded;
         faces = res.faces;
         errors = res.errors;
+      }
+
+      // ensure published even if meta race / cover-only update left it false
+      if (!album?.published) {
+        const sb = getSupabase();
+        const { data, error } = await sb
+          .from('albums')
+          .update({ published: true, updated_at: new Date().toISOString() })
+          .eq('id', albumId)
+          .select('*')
+          .single();
+        if (error) throw error;
+        album = data;
       }
 
       fillForm();
