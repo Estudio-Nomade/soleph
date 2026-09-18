@@ -107,26 +107,55 @@ export async function getPublishedAlbum(albumId) {
   if (error) throw error;
   if (!album) return null;
 
-  const { data: photos, error: pErr } = await sb
-    .from('photos')
-    .select('id, code, preview_path, sort_order, source_filename')
-    .eq('album_id', albumId)
-    .order('sort_order', { ascending: true });
+  const [{ data: photos, error: pErr }, { data: categories, error: cErr }] = await Promise.all([
+    sb
+      .from('photos')
+      .select('id, code, preview_path, sort_order, source_filename')
+      .eq('album_id', albumId)
+      .order('sort_order', { ascending: true }),
+    sb
+      .from('categories')
+      .select('id, name, slug, sort_order')
+      .eq('album_id', albumId)
+      .order('sort_order', { ascending: true }),
+  ]);
   if (pErr) throw pErr;
+  if (cErr) console.warn('categories', cErr.message);
 
+  const photoIds = (photos || []).map((p) => p.id);
+  /** @type {Record<string, string[]>} */
+  const photoCatMap = {};
+  if (photoIds.length) {
+    const { data: links, error: lErr } = await sb
+      .from('photo_categories')
+      .select('photo_id, category_id')
+      .in('photo_id', photoIds);
+    if (lErr) console.warn('photo_categories', lErr.message);
+    for (const row of links || []) {
+      if (!photoCatMap[row.photo_id]) photoCatMap[row.photo_id] = [];
+      photoCatMap[row.photo_id].push(row.category_id);
+    }
+  }
+
+  const catList = categories || [];
   const list = (photos || []).map((p) => {
     const src = publicStorageUrl(BUCKETS.previews, p.preview_path);
+    const categoryIds = photoCatMap[p.id] || [];
     return {
       id: p.id,
       code: p.code || String(p.id).replace(/-/g, '').slice(0, 8).toUpperCase(),
       src,
       thumb: src,
       preview_path: p.preview_path,
+      categoryIds,
+      // primary cat for simple grouping
+      categoryId: categoryIds[0] || '',
     };
   });
 
   return {
     ...normalizeAlbum(album, list.length),
+    categories: catList,
     photos: list,
   };
 }

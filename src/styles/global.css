@@ -772,6 +772,68 @@ select {
   gap: 0.45rem;
 }
 
+.shop-tools--row {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.cat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.cat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 44px;
+  padding: 0.35rem 0.85rem;
+  border: 1px solid var(--soft);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--navy);
+  font-size: 0.9rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.cat-chip:hover {
+  border-color: var(--navy-hover);
+}
+
+.cat-chip.is-on {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+
+.cat-chip-count {
+  font-size: 0.78rem;
+  font-weight: 700;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.cat-chip.is-on .cat-chip-count {
+  opacity: 0.9;
+}
+
+.album-cat-section {
+  margin-bottom: 1.75rem;
+}
+
+.album-cat-head {
+  margin-bottom: 0.65rem;
+}
+
+.album-cat-head h2 {
+  margin: 0 0 0.15rem;
+  color: var(--navy);
+  font-family: var(--serif);
+  font-size: 1.2rem;
+}
+
 .photo-tile {
   position: relative;
   margin: 0;
@@ -1229,6 +1291,10 @@ select {
   .shop-tools .btn,
   .shop-tools .btn-ghost {
     width: auto;
+  }
+
+  .shop-tools--row .cat-chips {
+    flex: 1 1 auto;
   }
 
   .selfie-actions {
