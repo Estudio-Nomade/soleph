@@ -181,11 +181,6 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     const groups = groupPhotos();
     renderChips(groups);
 
-    let visible = groups;
-    if (activeCat !== '') {
-      visible = groups.filter((g) => g.id === activeCat);
-    }
-
     sectionsEl.innerHTML = '';
     if (!album.photos.length) {
       emptyEl && (emptyEl.hidden = false);
@@ -193,17 +188,29 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     }
     emptyEl && (emptyEl.hidden = true);
 
+    // "Todas": una sola grilla, sin separar por categoría
+    if (activeCat === '') {
+      const section = document.createElement('section');
+      section.className = 'album-cat-section';
+      section.dataset.catSection = 'all';
+      const grid = document.createElement('div');
+      grid.className = 'photo-grid';
+      for (const photo of album.photos) grid.appendChild(makeTile(photo, unit));
+      section.appendChild(grid);
+      sectionsEl.appendChild(section);
+      syncSelected();
+      return;
+    }
+
+    const visible = groups.filter((g) => g.id === activeCat);
     for (const g of visible) {
       const section = document.createElement('section');
       section.className = 'album-cat-section';
       section.dataset.catSection = g.id || 'none';
-      const showHead = groups.length > 1 || Boolean(g.id);
-      section.innerHTML = showHead
-        ? `<div class="shop-section-head album-cat-head">
+      section.innerHTML = `<div class="shop-section-head album-cat-head">
             <h2>${escapeHtml(g.name)}</h2>
             <p class="shop-section-note">${g.photos.length} foto${g.photos.length === 1 ? '' : 's'}</p>
-          </div>`
-        : '';
+          </div>`;
       const grid = document.createElement('div');
       grid.className = 'photo-grid';
       for (const photo of g.photos) grid.appendChild(makeTile(photo, unit));
