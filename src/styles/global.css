@@ -930,22 +930,36 @@ select {
   pointer-events: none;
   z-index: 1;
   background-image:
-    linear-gradient(rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.04)),
+    linear-gradient(rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.02)),
     url('/images/logosinfondo.png');
-  background-size: 42% auto;
+  background-size: 48% auto;
   background-repeat: repeat;
   background-position: center;
-  opacity: 0.42;
+  /* default = portafolio: bien leve para que se vea la foto */
+  opacity: 0.14;
   filter: brightness(0);
   mix-blend-mode: multiply;
-  transform: rotate(-28deg) scale(1.45);
+  transform: rotate(-28deg) scale(1.4);
   transform-origin: center;
 }
 
+/* un poco más presente solo si hace falta (eventos estáticos legacy) */
+.wm-overlay--strong {
+  opacity: 0.34;
+  background-size: 42% auto;
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.04)),
+    url('/images/logosinfondo.png');
+}
+
 .wm-overlay--lightbox {
-  opacity: 0.38;
-  background-size: 28% auto;
-  transform: rotate(-28deg) scale(1.25);
+  opacity: 0.12;
+  background-size: 32% auto;
+  transform: rotate(-28deg) scale(1.2);
+}
+
+.wm-overlay--lightbox.wm-overlay--strong {
+  opacity: 0.28;
 }
 
 .photo-tile .wm {
