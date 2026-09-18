@@ -105,10 +105,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     el.dataset.albumName = album.name;
     el.dataset.unit = String(unit);
     if (photo.categoryId) el.dataset.cat = photo.categoryId;
-    // live previews already have logo watermark baked in — no CSS overlay
+    // Hasta re-bake: CSS pone UN logo visible en la grilla (el JPEG viejo
+    // trae patrón chico casi invisible en crop square).
+    // Lightbox: wm=css también (tapa un poco el patrón viejo con un logo grande).
+    // Después de "Actualizar marcas de agua" el JPEG ya tiene 1 logo; conviene
+    // dejar wm=off y sacar el span — por ahora priorizamos que se vea YA.
+    el.dataset.wm = 'css';
     el.innerHTML = `
       <button type="button" class="photo-tile-open" data-open-photo aria-label="Ver #${escapeHtml(code)} en grande">
         <img src="${escapeHtml(photo.thumb || photo.src)}" alt="#${escapeHtml(code)}" loading="lazy" width="600" height="600" />
+        <span class="wm-overlay" aria-hidden="true"></span>
       </button>
       <span class="photo-code-badge" title="Código de la foto">#${escapeHtml(code)}</span>
       <label class="photo-check" title="Elegir foto">

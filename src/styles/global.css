@@ -923,43 +923,36 @@ select {
   pointer-events: none;
 }
 
-/* Marca de agua CSS (series estáticas / lightbox). Eventos live ya traen logo en el JPEG. */
+/* Marca de agua CSS: UN solo logo centrado (series estáticas / lightbox sin bake).
+   Eventos live hornean el logo en el JPEG — ahí no se usa overlay CSS. */
 .wm-overlay {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 1;
-  background-image:
-    linear-gradient(rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.02)),
-    url('/images/logosinfondo.png');
-  background-size: 48% auto;
-  background-repeat: repeat;
-  background-position: center;
-  /* default = portafolio: bien leve para que se vea la foto */
-  opacity: 0.14;
+  background-color: transparent;
+  background-image: url('/images/logosinfondo.png');
+  background-repeat: no-repeat;
+  background-position: center center;
+  /* un logo bastante grande, no patrón */
+  background-size: 68% auto;
+  opacity: 0.34;
   filter: brightness(0);
   mix-blend-mode: multiply;
-  transform: rotate(-28deg) scale(1.4);
-  transform-origin: center;
+  transform: rotate(-18deg);
+  transform-origin: center center;
 }
 
-/* un poco más presente solo si hace falta (eventos estáticos legacy) */
-.wm-overlay--strong {
-  opacity: 0.34;
-  background-size: 42% auto;
-  background-image:
-    linear-gradient(rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.04)),
-    url('/images/logosinfondo.png');
-}
-
+/* lightbox: mismo criterio, un toque más chico porque el stage es grande */
 .wm-overlay--lightbox {
-  opacity: 0.12;
-  background-size: 32% auto;
-  transform: rotate(-28deg) scale(1.2);
+  background-size: 52% auto;
+  opacity: 0.32;
 }
 
-.wm-overlay--lightbox.wm-overlay--strong {
-  opacity: 0.28;
+/* ocultar overlay cuando la imagen ya trae bake (eventos live) */
+.wm-overlay.is-off,
+.lightbox-stage[data-wm='off'] .wm-overlay {
+  display: none;
 }
 
 .photo-tile .wm {

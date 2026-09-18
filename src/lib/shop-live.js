@@ -99,7 +99,7 @@ export async function getPublishedAlbum(albumId) {
   const { data: album, error } = await sb
     .from('albums')
     .select(
-      'id, slug, name, kind, date_label, message, photo_price_ars, price_tiers, cover_path, search_by_face, published',
+      'id, slug, name, kind, date_label, message, photo_price_ars, price_tiers, cover_path, search_by_face, published, updated_at',
     )
     .eq('id', albumId)
     .eq('published', true)
@@ -138,8 +138,13 @@ export async function getPublishedAlbum(albumId) {
   }
 
   const catList = categories || [];
+  // bust preview CDN/browser cache when album meta changes (re-bake watermark)
+  const albumBust = album.updated_at
+    ? `?v=${encodeURIComponent(String(album.updated_at))}`
+    : '';
   const list = (photos || []).map((p) => {
-    const src = publicStorageUrl(BUCKETS.previews, p.preview_path);
+    const base = publicStorageUrl(BUCKETS.previews, p.preview_path);
+    const src = base ? `${base}${albumBust}` : '';
     const categoryIds = photoCatMap[p.id] || [];
     return {
       id: p.id,

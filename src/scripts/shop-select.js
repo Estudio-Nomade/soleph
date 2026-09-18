@@ -93,9 +93,13 @@ function openLightboxFromTile(tile, scope) {
   if (!src) return;
   const list = gallerySources(scope);
   const start = Math.max(0, list.indexOf(src));
+  // data-wm="off" = preview ya trae logo horneado (evento live)
+  // default / "css" = un logo CSS encima (series estáticas)
+  const wmAttr = tile.getAttribute('data-wm') || scope?.getAttribute?.('data-wm') || 'css';
+  const wm = wmAttr === 'off' ? 'off' : 'css';
   const api = window.solephLightbox;
   if (api && typeof api.open === 'function') {
-    api.open(list, start >= 0 ? start : 0);
+    api.open(list, start >= 0 ? start : 0, { wm });
   } else {
     // fallback: full image in new tab
     window.open(src, '_blank', 'noopener');

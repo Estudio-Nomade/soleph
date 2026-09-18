@@ -4,23 +4,33 @@
 <div class="lightbox" data-lightbox aria-hidden="true">
   <button type="button" class="close" data-lightbox-close aria-label="Cerrar">×</button>
   <button type="button" class="nav prev" data-lightbox-prev aria-label="Anterior">‹</button>
-  <div class="lightbox-stage">
+  <div class="lightbox-stage" data-lightbox-stage data-wm="css">
     <img src="" alt="" data-lightbox-img />
-    <span class="wm-overlay wm-overlay--lightbox" aria-hidden="true"></span>
+    <span class="wm-overlay wm-overlay--lightbox" data-lightbox-wm aria-hidden="true"></span>
   </div>
   <button type="button" class="nav next" data-lightbox-next aria-label="Siguiente">›</button>
 </div>
 
 <script>
   const root = document.querySelector('[data-lightbox]');
+  const stage = document.querySelector('[data-lightbox-stage]');
   const img = document.querySelector('[data-lightbox-img]');
   let sources = [];
   let index = 0;
 
-  function open(list, start = 0) {
+  /**
+   * @param {string[]} list
+   * @param {number} [start]
+   * @param {{ wm?: 'css' | 'off' }} [opts]
+   *   wm='css' → un logo CSS encima (series estáticas / previews sin bake)
+   *   wm='off' → la imagen ya trae un logo horneado (eventos live)
+   */
+  function open(list, start = 0, opts = {}) {
     sources = (list || []).filter(Boolean);
     if (!sources.length) return;
     index = Math.max(0, Math.min(start, sources.length - 1));
+    const wm = opts?.wm === 'off' ? 'off' : 'css';
+    if (stage) stage.setAttribute('data-wm', wm);
     show();
     root?.classList.add('is-open');
     root?.setAttribute('aria-hidden', 'false');
@@ -73,7 +83,7 @@
     const figs = [...gallery.querySelectorAll('figure[data-full]')];
     const list = figs.map((f) => f.getAttribute('data-full')).filter(Boolean);
     const i = figs.indexOf(fig);
-    if (i >= 0) open(list, i);
+    if (i >= 0) open(list, i, { wm: 'css' });
   });
 
   // API global para grillas de tienda
