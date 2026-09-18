@@ -23,6 +23,10 @@ const DEFAULT_FORMATS = {
   ],
 };
 
+/** Texto que sale arriba del grilla en /tienda/{álbum} (portafolio estático y fallback). */
+const DEFAULT_ALBUM_MESSAGE =
+  'Alta resolución. Cuando confirmamos la transferencia por WhatsApp, te la mando por ahí.';
+
 /**
  * @param {any} raw
  * @param {typeof DEFAULT_FORMATS} fallback
@@ -45,6 +49,71 @@ export function normalizeFormats(raw, fallback = DEFAULT_FORMATS) {
 }
 
 /**
+ * Mensajes de álbum en tienda: default + overrides por id/slug.
+ * @param {any} raw
+ * @param {{ default?: string, by_id?: Record<string, string> }} fallback
+ */
+export function normalizeAlbumMessages(raw, fallback = {}) {
+  const baseDefault =
+    String(fallback?.default || '').trim() || DEFAULT_ALBUM_MESSAGE;
+  const byIdIn =
+    raw?.by_id && typeof raw.by_id === 'object' && !Array.isArray(raw.by_id)
+      ? raw.by_id
+      : fallback?.by_id && typeof fallback.by_id === 'object'
+        ? fallback.by_id
+        : {};
+  /** @type {Record<string, string>} */
+  const by_id = {};
+  for (const [k, v] of Object.entries(byIdIn || {})) {
+    const id = String(k || '').trim();
+    const msg = String(v || '').trim();
+    if (id && msg) by_id[id] = msg;
+  }
+  return {
+    default: String(raw?.default ?? baseDefault).trim() || baseDefault,
+    by_id,
+  };
+}
+
+/**
+ * Resuelve el mensaje a mostrar para un álbum de tienda.
+ * - by_id[id] siempre gana (texto propio desde admin Portafolio)
+ * - preferOwn=true (eventos live): message del álbum en SB → default storefront
+ * - preferOwn=false (series estáticas site.json): default storefront → message seed
+ * @param {string} albumId
+ * @param {{ default?: string, by_id?: Record<string, string> }|null|undefined} albumMessages
+ * @param {string|null|undefined} albumOwnMessage
+ * @param {string} [fallback]
+ * @param {{ preferOwn?: boolean }} [opts]
+ */
+export function resolveAlbumMessage(
+  albumId,
+  albumMessages,
+  albumOwnMessage,
+  fallback = DEFAULT_ALBUM_MESSAGE,
+  opts = {},
+) {
+  const preferOwn = !!opts.preferOwn;
+  const id = String(albumId || '').trim();
+  const map = albumMessages?.by_id || {};
+  if (id && map[id]) return String(map[id]).trim();
+
+  const own = String(albumOwnMessage || '').trim();
+  const def = String(albumMessages?.default || '').trim();
+
+  if (preferOwn) {
+    if (own) return own;
+    if (def) return def;
+    return fallback;
+  }
+
+  // series estáticas: el texto del admin (default) pisa el seed de site.json
+  if (def) return def;
+  if (own) return own;
+  return fallback;
+}
+
+/**
  * Lee datos de transferencia desde Supabase settings.
  * Si falla o no hay config, devuelve el fallback (site.json).
  * @param {{ owner?: string|null, alias?: string|null, cbu?: string|null, bank?: string|null }} fallback
@@ -55,8 +124,8 @@ export async function loadTransferSettings(fallback = {}) {
 }
 
 /**
- * storefront settings: transfer + formats (textos de carrito).
- * @param {{ transfer?: any, formats?: any }} fallback
+ * storefront settings: transfer + formats + album_messages (textos de tienda).
+ * @param {{ transfer?: any, formats?: any, album_messages?: any }} fallback
  */
 export async function loadStorefrontSettings(fallback = {}) {
   const baseTransfer = {
@@ -64,9 +133,16 @@ export async function loadStorefrontSettings(fallback = {}) {
     ...(fallback.transfer && typeof fallback.transfer === 'object' ? fallback.transfer : {}),
   };
   const baseFormats = normalizeFormats(fallback.formats, DEFAULT_FORMATS);
+  const baseAlbumMessages = normalizeAlbumMessages(fallback.album_messages, {
+    default: DEFAULT_ALBUM_MESSAGE,
+  });
 
   if (!isSupabaseConfigured()) {
-    return { transfer: baseTransfer, formats: baseFormats };
+    return {
+      transfer: baseTransfer,
+      formats: baseFormats,
+      album_messages: baseAlbumMessages,
+    };
   }
 
   try {
@@ -83,11 +159,17 @@ export async function loadStorefrontSettings(fallback = {}) {
         bank: transferRaw.bank ?? baseTransfer.bank ?? null,
       },
       formats: normalizeFormats(value.formats, baseFormats),
+      album_messages: normalizeAlbumMessages(value.album_messages, baseAlbumMessages),
       raw: value,
     };
   } catch (err) {
     console.warn('loadStorefrontSettings', err?.message || err);
-    return { transfer: baseTransfer, formats: baseFormats, raw: {} };
+    return {
+      transfer: baseTransfer,
+      formats: baseFormats,
+      album_messages: baseAlbumMessages,
+      raw: {},
+    };
   }
 }
 
@@ -121,4 +203,4 @@ export async function loadAlbumPrices(albumIds) {
   return map;
 }
 
-export { DEFAULT_TRANSFER, DEFAULT_FORMATS };
+export { DEFAULT_TRANSFER, DEFAULT_FORMATS, DEFAULT_ALBUM_MESSAGE };

@@ -22,10 +22,32 @@ import site from '../../data/site.json';
 
     <div data-ready hidden>
       <div class="admin-card">
-        <h2 class="admin-section-title">Textos de la tienda (formatos)</h2>
+        <h2 class="admin-section-title">Textos de la tienda</h2>
         <p class="admin-muted" style="margin-top:0">
-          Lo que ve el cliente al elegir “Para redes” / “Para impresión” en el carrito.
-          Ej.: <em>Alta resolución… te la mando por WhatsApp</em>.
+          Mensaje arriba de las fotos (ej. LA MAKEKA) y textos al elegir formato en el carrito.
+          Se publican al guardar, sin redeploy.
+        </p>
+
+        <h3 class="admin-section-title" style="font-size:1rem; margin:0.25rem 0 0.5rem">Mensaje del álbum</h3>
+        <p class="admin-muted" style="margin-top:0">
+          Sale en la tienda debajo del título, antes de la grilla. Si una serie no tiene texto propio, usa el general.
+        </p>
+        <div class="admin-form" data-album-messages>
+          <label>
+            Texto general (todas las series del portafolio en tienda)
+            <textarea
+              data-album-msg-default
+              rows="2"
+              maxlength="500"
+              placeholder="Alta resolución. Cuando confirmamos la transferencia por WhatsApp, te la mando por ahí."
+            ></textarea>
+          </label>
+          <div data-album-msg-list></div>
+        </div>
+
+        <h3 class="admin-section-title" style="font-size:1rem; margin:1.25rem 0 0.5rem">Formatos del carrito</h3>
+        <p class="admin-muted" style="margin-top:0">
+          Lo que ve el cliente al elegir “Para redes” / “Para impresión”.
         </p>
         <div class="admin-form" data-formats>
           <label>
@@ -38,7 +60,7 @@ import site from '../../data/site.json';
               data-fmt-hint="impresion"
               rows="2"
               maxlength="280"
-              placeholder="Alta resolución. Cuando confirmamos la transferencia por WhatsApp, te la mando por ahí."
+              placeholder="Alta resolución para imprimir (hasta el tamaño que indique Sole)."
             ></textarea>
           </label>
         </div>
@@ -86,7 +108,10 @@ import site from '../../data/site.json';
       </div>
 
       <div class="admin-sticky-bar">
-        <p class="admin-muted" style="margin:0">Cambios visibles en /trabajos, /sobre-mi y /proyecto/…</p>
+        <div>
+          <p class="admin-muted" style="margin:0">Cambios visibles en /trabajos, /sobre-mi, tienda (mensajes de álbum), carrito y /proyecto/…</p>
+          <p class="admin-msg admin-msg--ok" data-save-status hidden style="margin:0.35rem 0 0"></p>
+        </div>
         <button type="button" class="admin-btn" data-save-bottom>Guardar todo</button>
       </div>
     </div>
@@ -108,7 +133,13 @@ import site from '../../data/site.json';
     PORTFOLIO_SETTINGS_KEY,
   } from '../../lib/portfolio.js';
   import { getSupabase } from '../../lib/supabase.js';
-  import { loadStorefrontSettings, normalizeFormats, DEFAULT_FORMATS } from '../../lib/settings.js';
+  import {
+    loadStorefrontSettings,
+    normalizeFormats,
+    normalizeAlbumMessages,
+    DEFAULT_FORMATS,
+    DEFAULT_ALBUM_MESSAGE,
+  } from '../../lib/settings.js';
 
   const root = document.querySelector('[data-admin-portfolio]');
   const errEl = root?.querySelector('[data-error]');
@@ -122,6 +153,8 @@ import site from '../../data/site.json';
   const introInput = root?.querySelector('[data-trabajos-intro]');
   const fmtRedes = root?.querySelector('[data-fmt-hint="redes"]');
   const fmtImp = root?.querySelector('[data-fmt-hint="impresion"]');
+  const albumMsgDefault = root?.querySelector('[data-album-msg-default]');
+  const albumMsgList = root?.querySelector('[data-album-msg-list]');
   const saveBtns = [...(root?.querySelectorAll('[data-save], [data-save-bottom]') || [])];
 
   /** @type {any} */
@@ -130,18 +163,66 @@ import site from '../../data/site.json';
   let storefront = {};
   /** @type {any} */
   let formats = DEFAULT_FORMATS;
+  /** @type {{ default: string, by_id: Record<string, string> }} */
+  let albumMessages = normalizeAlbumMessages(null, { default: DEFAULT_ALBUM_MESSAGE });
+  /** @type {Array<{ id: string, name: string, seedMessage?: string }>} */
+  let shopAlbums = [];
   let busy = false;
 
   function showError(msg) {
     if (!errEl) return;
     errEl.hidden = !msg;
     errEl.textContent = msg || '';
-    if (msg) window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (msg) {
+      errEl.classList.add('is-flash');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setTimeout(() => errEl.classList.remove('is-flash'), 1200);
+    }
+    // mirror near sticky save
+    const sticky = root?.querySelector('[data-save-status]');
+    if (sticky) {
+      sticky.hidden = !msg;
+      sticky.textContent = msg || '';
+      sticky.className = 'admin-msg admin-msg--error';
+    }
   }
   function showOk(msg) {
     if (!okEl) return;
     okEl.hidden = !msg;
     okEl.textContent = msg || '';
+    if (msg) {
+      okEl.classList.add('is-flash');
+      // always bring success into view (save is often from bottom sticky)
+      okEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => okEl.classList.remove('is-flash'), 1600);
+    }
+    const sticky = root?.querySelector('[data-save-status]');
+    if (sticky) {
+      sticky.hidden = !msg;
+      sticky.textContent = msg || '';
+      sticky.className = msg ? 'admin-msg admin-msg--ok' : 'admin-msg admin-msg--ok';
+      if (!msg) sticky.hidden = true;
+    }
+  }
+
+  function setSaveBusy(on, label) {
+    busy = on;
+    saveBtns.forEach((b) => {
+      b.disabled = on;
+      if (b.hasAttribute('data-save') || b.hasAttribute('data-save-bottom')) {
+        if (on) {
+          if (!b.dataset.label) b.dataset.label = b.textContent || 'Guardar todo';
+          b.textContent = label || 'Guardando…';
+        } else if (label) {
+          b.textContent = label;
+          setTimeout(() => {
+            b.textContent = b.dataset.label || 'Guardar todo';
+          }, 2200);
+        } else {
+          b.textContent = b.dataset.label || 'Guardar todo';
+        }
+      }
+    });
   }
   function escapeHtml(s) {
     return String(s)
@@ -169,6 +250,29 @@ import site from '../../data/site.json';
     if (fmtImp) fmtImp.value = imp?.hint || '';
   }
 
+  function fillAlbumMessages() {
+    if (albumMsgDefault) {
+      albumMsgDefault.value = albumMessages?.default || DEFAULT_ALBUM_MESSAGE;
+    }
+    if (!albumMsgList) return;
+    if (!shopAlbums.length) {
+      albumMsgList.innerHTML =
+        '<p class="admin-muted">No hay series de tienda en el seed. El texto general igual aplica.</p>';
+      return;
+    }
+    albumMsgList.innerHTML = shopAlbums
+      .map((a) => {
+        const saved = albumMessages?.by_id?.[a.id];
+        // si hay override guardado lo mostramos; si no, vacío = usa el general (no re-inyectar seed)
+        const value = saved != null ? saved : '';
+        return `<label>
+          Texto propio · ${escapeHtml(a.name)} <span class="admin-muted">(${escapeHtml(a.id)})</span>
+          <textarea data-album-msg-id="${escapeHtml(a.id)}" rows="2" maxlength="500" placeholder="Vacío = usa el texto general">${escapeHtml(value)}</textarea>
+        </label>`;
+      })
+      .join('');
+  }
+
   function readFormatsFromForm() {
     const base = normalizeFormats(formats, DEFAULT_FORMATS);
     const options = base.options.map((o) => {
@@ -193,6 +297,24 @@ import site from '../../data/site.json';
     }
     formats = normalizeFormats({ default: base.default, options }, DEFAULT_FORMATS);
     return formats;
+  }
+
+  function readAlbumMessagesFromForm() {
+    /** @type {Record<string, string>} */
+    const by_id = {};
+    albumMsgList?.querySelectorAll('[data-album-msg-id]').forEach((el) => {
+      const id = el.getAttribute('data-album-msg-id');
+      const msg = String(/** @type {HTMLTextAreaElement} */ (el).value || '').trim();
+      if (id && msg) by_id[id] = msg;
+    });
+    albumMessages = normalizeAlbumMessages(
+      {
+        default: String(albumMsgDefault?.value || '').trim() || DEFAULT_ALBUM_MESSAGE,
+        by_id,
+      },
+      { default: DEFAULT_ALBUM_MESSAGE },
+    );
+    return albumMessages;
   }
 
   function projectCard(p, idx) {
@@ -354,13 +476,22 @@ import site from '../../data/site.json';
   });
 
   async function save() {
-    if (busy || !content) return;
+    if (busy) return;
+    if (!content) {
+      showError('Todavía está cargando. Esperá un segundo y volvé a tocar Guardar.');
+      return;
+    }
     showError('');
     showOk('');
     syncAllFields();
     const payload = normalizePortfolio(content, content);
+    // Sobre mí: si quedó vacío, no bloqueamos formatos/proyectos — usamos el seed
     if (!payload.about.body.trim()) {
-      showError('Completá el texto de Sobre mí');
+      const seedBody = String(window.__SOLEPH_SITE_SEED__?.about?.body || '').trim();
+      if (seedBody) payload.about.body = seedBody;
+    }
+    if (!payload.about.body.trim()) {
+      showError('Completá el texto de Sobre mí antes de guardar.');
       return;
     }
     for (const p of payload.projects) {
@@ -370,41 +501,62 @@ import site from '../../data/site.json';
       }
     }
     const formatsPayload = readFormatsFromForm();
-    busy = true;
-    saveBtns.forEach((b) => (b.disabled = true));
+    const albumMsgPayload = readAlbumMessagesFromForm();
+    setSaveBusy(true, 'Guardando…');
     try {
       const sb = getSupabase();
-      const { error } = await sb.from('settings').upsert({
-        key: PORTFOLIO_SETTINGS_KEY,
-        value: payload,
-        updated_at: new Date().toISOString(),
-      });
+      const now = new Date().toISOString();
+      const { data: pfRow, error } = await sb
+        .from('settings')
+        .upsert(
+          {
+            key: PORTFOLIO_SETTINGS_KEY,
+            value: payload,
+            updated_at: now,
+          },
+          { onConflict: 'key' },
+        )
+        .select('key, updated_at')
+        .single();
       if (error) throw error;
+      if (!pfRow?.key) throw new Error('No se confirmó el guardado del portafolio');
 
-      // merge formats into storefront (keep transfer etc.)
+      // merge formats + album messages into storefront (keep transfer etc.)
       const nextStore = {
         ...(storefront && typeof storefront === 'object' ? storefront : {}),
         formats: formatsPayload,
+        album_messages: albumMsgPayload,
       };
-      const { error: sErr } = await sb.from('settings').upsert({
-        key: 'storefront',
-        value: nextStore,
-        updated_at: new Date().toISOString(),
-      });
+      const { data: stRow, error: sErr } = await sb
+        .from('settings')
+        .upsert(
+          {
+            key: 'storefront',
+            value: nextStore,
+            updated_at: now,
+          },
+          { onConflict: 'key' },
+        )
+        .select('key, updated_at')
+        .single();
       if (sErr) throw sErr;
+      if (!stRow?.key) throw new Error('No se confirmó el guardado de textos de tienda');
+
       storefront = nextStore;
       formats = formatsPayload;
-
+      albumMessages = albumMsgPayload;
       content = payload;
       fillAbout();
       fillFormats();
+      fillAlbumMessages();
       renderProjects();
-      showOk('Guardado · portafolio + textos de tienda ya en la web (hard refresh si hace falta)');
+      const when = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      showOk(`✓ Guardado a las ${when}. Ya está en la web (hard refresh si no lo ves).`);
+      setSaveBusy(false, '✓ Guardado');
     } catch (err) {
+      console.error('portfolio save', err);
       showError(err?.message || 'No se pudo guardar');
-    } finally {
-      busy = false;
-      saveBtns.forEach((b) => (b.disabled = false));
+      setSaveBusy(false);
     }
   }
 
@@ -417,14 +569,33 @@ import site from '../../data/site.json';
       const seedSite = window.__SOLEPH_SITE_SEED__ || {};
       const seed = portfolioFallbackFromSite(seedSite);
       content = await loadPortfolioContent(seed);
+      shopAlbums = (seedSite.shop?.albums || [])
+        .filter((a) => a && a.id)
+        .map((a) => ({
+          id: String(a.id),
+          name: String(a.name || a.id),
+          seedMessage: String(a.message || '').trim() || undefined,
+        }));
+      // seed album messages: solo default; overrides por serie se cargan de SB si existen
       const store = await loadStorefrontSettings({
         formats: seedSite.shop?.formats,
         transfer: seedSite.shop?.transfer,
+        album_messages: {
+          default:
+            shopAlbums.find((a) => a.seedMessage)?.seedMessage || DEFAULT_ALBUM_MESSAGE,
+          by_id: {},
+        },
       });
       formats = store.formats;
-      storefront = store.raw || { transfer: store.transfer, formats: store.formats };
+      albumMessages = store.album_messages;
+      storefront = store.raw || {
+        transfer: store.transfer,
+        formats: store.formats,
+        album_messages: store.album_messages,
+      };
       fillAbout();
       fillFormats();
+      fillAlbumMessages();
       renderProjects();
       loadingEl && (loadingEl.hidden = true);
       readyEl && (readyEl.hidden = false);
