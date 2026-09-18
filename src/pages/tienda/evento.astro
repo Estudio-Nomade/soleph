@@ -26,11 +26,12 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         <a class="btn" href="/tienda/buscar">Ir a buscar</a>
       </section>
 
-      <div class="shop-tools" style="justify-content:flex-start; margin-bottom:1rem;">
+      <div class="shop-tools shop-tools--row" style="margin-bottom:1rem;">
+        <div class="cat-chips" data-cat-chips hidden role="tablist" aria-label="Categorías"></div>
         <button type="button" class="btn btn-ghost" data-open-cart>Ver carrito</button>
       </div>
 
-      <section class="photo-grid" data-photo-grid></section>
+      <div data-album-sections></div>
       <p class="face-hint" data-empty hidden>Este evento todavía no tiene fotos publicadas.</p>
     </div>
   </main>
@@ -50,10 +51,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   const messageEl = root?.querySelector('[data-message]');
   const tiersEl = root?.querySelector('[data-tiers]');
   const faceBox = root?.querySelector('[data-face-box]');
-  const grid = root?.querySelector('[data-photo-grid]');
+  const sectionsEl = root?.querySelector('[data-album-sections]');
+  const chipsEl = root?.querySelector('[data-cat-chips]');
   const emptyEl = root?.querySelector('[data-empty]');
 
   const albumId = new URLSearchParams(window.location.search).get('id');
+
+  /** @type {any} */
+  let album = null;
+  /** @type {string} '' = todas */
+  let activeCat = '';
 
   function showError(msg) {
     if (!errorEl) return;
@@ -61,14 +68,149 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     errorEl.textContent = msg || '';
   }
 
+  function escapeHtml(s) {
+    return String(s)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
+  }
+
   function syncSelected() {
-    grid?.querySelectorAll('[data-photo]').forEach((tile) => {
+    sectionsEl?.querySelectorAll('[data-photo]').forEach((tile) => {
       const id = tile.getAttribute('data-id');
       const on = id && isInCart(id);
       tile.classList.toggle('is-selected', !!on);
       const label = tile.querySelector('[data-add]');
       if (label) label.textContent = on ? 'En carrito' : 'Agregar';
     });
+  }
+
+  function makeTile(photo, unit) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'photo-tile';
+    btn.dataset.photo = '';
+    btn.dataset.id = photo.id;
+    btn.dataset.code = photo.code || '';
+    btn.dataset.src = photo.src;
+    btn.dataset.thumb = photo.thumb || photo.src;
+    btn.dataset.albumId = album.id;
+    btn.dataset.albumName = album.name;
+    btn.dataset.unit = String(unit);
+    if (photo.categoryId) btn.dataset.cat = photo.categoryId;
+    btn.innerHTML = `
+      <img src="${photo.thumb || photo.src}" alt="" loading="lazy" width="600" height="600" />
+      <span class="wm" aria-hidden="true">SOLE YAQUINTA</span>
+      <span class="add" data-add>Agregar</span>
+    `;
+    btn.addEventListener('click', () => {
+      const id = photo.id;
+      if (isInCart(id)) removeFromCart(id);
+      else {
+        addToCart({
+          id,
+          code: photo.code || '',
+          src: photo.src,
+          thumb: photo.thumb || photo.src,
+          albumId: album.id,
+          albumName: album.name,
+          unitPrice: unit,
+        });
+      }
+      syncSelected();
+    });
+    return btn;
+  }
+
+  function groupPhotos() {
+    const cats = Array.isArray(album?.categories) ? album.categories : [];
+    const photos = Array.isArray(album?.photos) ? album.photos : [];
+    /** @type {{ id: string, name: string, photos: any[] }[]} */
+    const groups = cats.map((c) => ({
+      id: c.id,
+      name: c.name,
+      photos: photos.filter((p) => (p.categoryIds || []).includes(c.id) || p.categoryId === c.id),
+    }));
+    const assigned = new Set(groups.flatMap((g) => g.photos.map((p) => p.id)));
+    const uncategorized = photos.filter((p) => !assigned.has(p.id));
+    if (uncategorized.length) {
+      groups.push({ id: '', name: cats.length ? 'Sin categoría' : 'Todas', photos: uncategorized });
+    }
+    // drop empty cats unless filtering none
+    return groups.filter((g) => g.photos.length > 0);
+  }
+
+  function renderChips(groups) {
+    if (!chipsEl) return;
+    const multi = groups.length > 1;
+    chipsEl.hidden = !multi;
+    if (!multi) {
+      chipsEl.innerHTML = '';
+      return;
+    }
+    const total = album.photos.length;
+    const items = [{ id: '', name: 'Todas', count: total }, ...groups.map((g) => ({ id: g.id, name: g.name, count: g.photos.length }))];
+    // unique by id
+    const seen = new Set();
+    const uniq = items.filter((it) => {
+      const k = it.id || '__all__';
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    chipsEl.innerHTML = uniq
+      .map((it) => {
+        const on = (it.id || '') === activeCat ? ' is-on' : '';
+        return `<button type="button" class="cat-chip${on}" data-cat-filter="${escapeHtml(it.id || '')}" role="tab" aria-selected="${on ? 'true' : 'false'}">
+          ${escapeHtml(it.name)} <span class="cat-chip-count">${it.count}</span>
+        </button>`;
+      })
+      .join('');
+    chipsEl.querySelectorAll('[data-cat-filter]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        activeCat = btn.getAttribute('data-cat-filter') || '';
+        renderSections();
+      });
+    });
+  }
+
+  function renderSections() {
+    if (!sectionsEl || !album) return;
+    const unit = Number(album.photo_price_ars) || 0;
+    const groups = groupPhotos();
+    renderChips(groups);
+
+    let visible = groups;
+    if (activeCat !== '') {
+      visible = groups.filter((g) => g.id === activeCat);
+    }
+
+    sectionsEl.innerHTML = '';
+    if (!album.photos.length) {
+      emptyEl && (emptyEl.hidden = false);
+      return;
+    }
+    emptyEl && (emptyEl.hidden = true);
+
+    for (const g of visible) {
+      const section = document.createElement('section');
+      section.className = 'album-cat-section';
+      section.dataset.catSection = g.id || 'none';
+      const showHead = groups.length > 1 || Boolean(g.id);
+      section.innerHTML = showHead
+        ? `<div class="shop-section-head album-cat-head">
+            <h2>${escapeHtml(g.name)}</h2>
+            <p class="shop-section-note">${g.photos.length} foto${g.photos.length === 1 ? '' : 's'}</p>
+          </div>`
+        : '';
+      const grid = document.createElement('div');
+      grid.className = 'photo-grid';
+      for (const photo of g.photos) grid.appendChild(makeTile(photo, unit));
+      section.appendChild(grid);
+      sectionsEl.appendChild(section);
+    }
+    syncSelected();
   }
 
   async function load() {
@@ -83,7 +225,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       return;
     }
     try {
-      const album = await getPublishedAlbum(albumId);
+      album = await getPublishedAlbum(albumId);
       loadingEl && (loadingEl.hidden = true);
       if (!album) {
         showError('Evento no encontrado o no publicado.');
@@ -94,7 +236,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       if (nameEl) nameEl.textContent = album.name;
       if (subEl) {
         const kind = album.kind === 'portfolio' ? 'Portafolio' : 'Evento';
-        subEl.textContent = `${kind}${album.date_label ? ` · ${album.date_label}` : ''} · ${album.photos.length} fotos`;
+        const nCat = (album.categories || []).length;
+        subEl.textContent = `${kind}${album.date_label ? ` · ${album.date_label}` : ''} · ${album.photos.length} fotos${
+          nCat ? ` · ${nCat} categorías` : ''
+        }`;
       }
       if (messageEl) {
         messageEl.textContent = album.message || 'Elegí las fotos y agregalas al carrito.';
@@ -117,49 +262,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
       if (faceBox) faceBox.hidden = album.search_by_face === false;
 
-      if (!album.photos.length) {
-        emptyEl && (emptyEl.hidden = false);
-      } else if (grid) {
-        emptyEl && (emptyEl.hidden = true);
-        grid.innerHTML = '';
-        for (const photo of album.photos) {
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'photo-tile';
-          btn.dataset.photo = '';
-          btn.dataset.id = photo.id;
-          btn.dataset.code = photo.code || '';
-          btn.dataset.src = photo.src;
-          btn.dataset.thumb = photo.thumb || photo.src;
-          btn.dataset.albumId = album.id;
-          btn.dataset.albumName = album.name;
-          btn.dataset.unit = String(unit);
-          btn.innerHTML = `
-            <img src="${photo.thumb || photo.src}" alt="" loading="lazy" width="600" height="600" />
-            <span class="wm" aria-hidden="true">SOLE YAQUINTA</span>
-            <span class="add" data-add>Agregar</span>
-          `;
-          btn.addEventListener('click', () => {
-            const id = photo.id;
-            if (isInCart(id)) removeFromCart(id);
-            else {
-              addToCart({
-                id,
-                code: photo.code || '',
-                src: photo.src,
-                thumb: photo.thumb || photo.src,
-                albumId: album.id,
-                albumName: album.name,
-                unitPrice: unit,
-              });
-            }
-            syncSelected();
-          });
-          grid.appendChild(btn);
-        }
-        syncSelected();
+      // deep-link ?cat=slug
+      const catParam = new URLSearchParams(window.location.search).get('cat');
+      if (catParam && album.categories?.length) {
+        const hit = album.categories.find(
+          (c) => c.slug === catParam || c.id === catParam || c.name.toLowerCase() === catParam.toLowerCase(),
+        );
+        if (hit) activeCat = hit.id;
       }
 
+      renderSections();
       readyEl && (readyEl.hidden = false);
       window.addEventListener('soleph:cart', syncSelected);
     } catch (err) {
