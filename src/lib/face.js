@@ -42,9 +42,14 @@ async function invokeFunction(name, body, opts = {}) {
       const { data } = await sb.auth.getSession();
       if (data.session?.access_token) {
         headers.Authorization = `Bearer ${data.session.access_token}`;
+      } else if (opts.requireAuth !== false) {
+        throw new Error('Sesión admin vencida. Volvé a entrar a /admin/login');
       }
-    } catch {
-      /* keep anon */
+    } catch (err) {
+      if (err?.message?.includes('Sesión admin')) throw err;
+      if (opts.requireAuth !== false) {
+        throw new Error(err?.message || 'No hay sesión admin para indexar caras');
+      }
     }
   }
 
@@ -103,13 +108,44 @@ export async function indexPhotoFaces({ photoId, albumId, image }) {
     throw new Error('Imagen no soportada para index');
   }
 
-  const json = await invokeFunction('face-index', body, { auth: true });
+  const json = await invokeFunction('face-index', body, { auth: true, requireAuth: true });
   return {
     faces: Number(json.indexed || json.faceIds?.length || 0),
     faceIds: json.faceIds || [],
     collectionId: json.collectionId,
     engine: 'rekognition',
   };
+}
+
+/**
+ * Index con reintentos (red / Edge / AWS transitorio).
+ * @param {{ photoId: string, albumId: string, image: File|Blob|string, attempts?: number }} args
+ */
+export async function indexPhotoFacesWithRetry({ photoId, albumId, image, attempts = 3 }) {
+  let lastErr;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      return await indexPhotoFaces({ photoId, albumId, image });
+    } catch (err) {
+      lastErr = err;
+      // no reintentar auth / payload inválido
+      const msg = String(err?.message || '');
+      if (/Sesión admin|Solo admin|No auth|albumId|photoId|Imagen no soportada|demasiado grande/i.test(msg)) {
+        throw err;
+      }
+      await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+    }
+  }
+  throw lastErr || new Error('No se pudo indexar caras');
+}
+
+/**
+ * True si la foto ya tiene al menos un face id de Rekognition.
+ * @param {{ rekognition_face_ids?: string[]|null }} photo
+ */
+export function photoHasIndexedFaces(photo) {
+  const ids = photo?.rekognition_face_ids;
+  return Array.isArray(ids) && ids.length > 0;
 }
 
 /**
@@ -158,11 +194,14 @@ export async function searchAlbumBySelfie({
     previewUrl: publicStorageUrl(BUCKETS.previews, row.previewPath),
   }));
 
+  const msg = String(json.message || '');
+  const notIndexed = /sin caras indexadas|ResourceNotFound|no faces indexed/i.test(msg);
+
   // Edge may return empty matches but ok if no faces in selfie
   if (!matches.length && !json.photoIds?.length) {
     // distinguish "no face in selfie" vs "no match" when possible
     if (json.searchedFaceConfidence != null && json.searchedFaceConfidence < 70) {
-      return { photoIds: [], matches: [], noFace: true };
+      return { photoIds: [], matches: [], noFace: true, notIndexed: false };
     }
   }
 
@@ -170,6 +209,8 @@ export async function searchAlbumBySelfie({
     photoIds: json.photoIds || matches.map((m) => m.photoId),
     matches,
     noFace: false,
+    notIndexed,
+    message: msg || '',
     album: json.album,
     engine: 'rekognition',
   };

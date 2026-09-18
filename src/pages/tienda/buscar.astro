@@ -270,13 +270,19 @@ const onlyEvents = eventAlbums.length > 0;
     setStatus('Buscando tus fotos…');
     try {
       const albumId = select.value;
-      const { photoIds, matches, noFace } = await searchAlbumBySelfie({
+      const { photoIds, matches, noFace, notIndexed } = await searchAlbumBySelfie({
         albumId,
         selfie: selfieFile,
       });
       if (noFace) {
         showError('No detectamos una cara en el selfie. Probá de frente y con buena luz.');
         setStatus('Sin cara detectada.');
+        return;
+      }
+      if (notIndexed) {
+        showError('Este evento todavía no tiene caras listas para buscar. Probá más tarde o avisá a Sole.');
+        setStatus('Evento sin índice de caras.');
+        renderMatches([], liveAlbums[albumId] || { id: albumId });
         return;
       }
       const meta = liveAlbums[albumId] || { id: albumId, name: select.selectedOptions[0]?.textContent || '' };
