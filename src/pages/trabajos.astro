@@ -17,7 +17,16 @@ import site from '../data/site.json';
       {
         site.projects.map((project) => (
           <a class="work-card" href={project.href}>
-            <img class="cover" src={project.cover} alt={project.title} loading="lazy" width="1200" height="900" />
+            <img
+              class="cover"
+              src={project.cover}
+              alt={project.title}
+              loading="lazy"
+              decoding="async"
+              width="1200"
+              height="900"
+              sizes="(min-width: 933px) 48vw, 100vw"
+            />
             <div class="meta">
               <div class="title">{project.title}</div>
               <div class="year">{project.year}</div>
@@ -26,7 +35,16 @@ import site from '../data/site.json';
         ))
       }
       <a class="work-card" href="/sobre-mi">
-        <img class="cover" src="/images/covers/sobre-mi.jpg" alt="Sobre mí" loading="lazy" width="1200" height="900" />
+        <img
+          class="cover"
+          src="/images/covers/sobre-mi.jpg"
+          alt="Sobre mí"
+          loading="lazy"
+          decoding="async"
+          width="1200"
+          height="900"
+          sizes="(min-width: 933px) 48vw, 100vw"
+        />
         <div class="meta">
           <div class="title">Sobre mí</div>
           <div class="year">2026</div>

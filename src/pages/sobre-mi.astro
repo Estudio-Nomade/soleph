@@ -11,7 +11,16 @@ const wa = site.brand.whatsapp_digits || '5492494550855';
   <main class="page page--about">
     <section class="about-hero">
       <div class="about-photo">
-        <img src={site.about.image} alt={site.brand.name} width="1200" height="1500" loading="eager" />
+        <img
+          src={site.about.image}
+          alt={site.brand.name}
+          width="933"
+          height="1400"
+          loading="eager"
+          decoding="async"
+          fetchpriority="high"
+          sizes="(min-width: 933px) 42vw, 100vw"
+        />
       </div>
 
       <div class="about-copy-col">
@@ -36,7 +45,15 @@ const wa = site.brand.whatsapp_digits || '5492494550855';
         {
           site.projects.slice(0, 3).map((p) => (
             <a class="related-card" href={p.href}>
-              <img src={p.cover} alt={p.title} loading="lazy" width="800" height="600" />
+              <img
+                src={p.cover}
+                alt={p.title}
+                loading="lazy"
+                decoding="async"
+                width="800"
+                height="600"
+                sizes="(min-width: 933px) 30vw, 100vw"
+              />
               <div class="label">
                 <strong>{p.title}</strong>
                 <span>{p.year}</span>
