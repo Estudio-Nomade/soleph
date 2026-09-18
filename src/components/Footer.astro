@@ -1,11 +1,31 @@
 ---
 import site from '../data/site.json';
 const year = new Date().getFullYear();
+const ig = site.brand.instagram;
 ---
 
 <footer class="site-footer">
   <a class="back-top" href="#top">↑ Volver arriba</a>
   <div class="brand">{site.brand.name.toUpperCase()}</div>
-  <div>{site.brand.location}</div>
+  <div class="site-footer-meta">
+    <span>{site.brand.location}</span>
+    {
+      ig && (
+        <>
+          <span class="site-footer-sep" aria-hidden="true">
+            ·
+          </span>
+          <a
+            class="site-footer-ig"
+            href={ig}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Instagram
+          </a>
+        </>
+      )
+    }
+  </div>
   <div>© {year}</div>
 </footer>

@@ -1509,6 +1509,33 @@ body.lightbox-open {
   margin-bottom: 0.35rem;
 }
 
+.site-footer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem 0.5rem;
+  margin: 0.15rem 0 0.35rem;
+}
+
+.site-footer-sep {
+  opacity: 0.55;
+}
+
+.site-footer-ig {
+  color: var(--navy);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  min-height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+}
+
+.site-footer-ig:hover {
+  color: var(--navy-hover);
+}
+
 .back-top {
   display: inline-block;
   margin: 1.25rem auto 0;
