@@ -66,7 +66,7 @@ const onlyEvents = eventAlbums.length > 0;
 
       <button type="submit" class="btn btn-block" data-submit disabled>Buscar mis fotos</button>
       <p class="form-note" data-status>
-        Match con AWS Rekognition (colección por evento). Elegí un evento en vivo y un selfie de frente.
+        Elegí un evento y un selfie de frente.
       </p>
       <p class="form-note" data-error hidden style="color:#8a1f1f;"></p>
     </form>
@@ -267,7 +267,7 @@ const onlyEvents = eventAlbums.length > 0;
     }
 
     submit && (submit.disabled = true);
-    setStatus('Buscando con Rekognition…');
+    setStatus('Buscando tus fotos…');
     try {
       const albumId = select.value;
       const { photoIds, matches, noFace } = await searchAlbumBySelfie({
@@ -284,8 +284,8 @@ const onlyEvents = eventAlbums.length > 0;
       renderMatches(matches, meta);
       setStatus(
         photoIds.length
-          ? `Listo: ${photoIds.length} foto(s) (Rekognition). Podés agregarlas al carrito.`
-          : 'Búsqueda lista. No hubo match por encima del umbral.',
+          ? `Listo: ${photoIds.length} foto(s). Podés agregarlas al carrito.`
+          : 'Búsqueda lista. No hubo coincidencias claras.',
       );
     } catch (err) {
       console.error(err);
