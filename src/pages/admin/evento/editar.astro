@@ -97,8 +97,11 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         <h2 class="admin-section-title">4. Fotos por categoría</h2>
         <p class="admin-muted" style="margin-top:0">
           Elegí <strong>carpeta</strong> o <strong>fotos</strong> en cada categoría. Quedan en cola
-          hasta que toques <strong>Subir evento</strong> (guarda datos, sube archivos e indexa caras
-          si está activado).
+          hasta que toques <strong>Subir evento</strong> (guarda datos, sube archivos e indexa caras).
+        </p>
+        <p class="admin-muted" style="margin-top:0.35rem">
+          <strong>Peso máximo: 50&nbsp;MB por foto</strong> (JPG o PNG). Si alguna pesa más, exportala
+          más liviana antes de subir. Con muchas fotos grandes conviene ir de a tandas.
         </p>
 
         <div class="admin-upload-cats" data-upload-cats></div>
@@ -199,6 +202,9 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
    * @type {{ id: string, file: File, categoryId: string, categoryName: string }[]}
    */
   let queue = [];
+  /** Límite bucket album-originals (supabase/schema.sql). */
+  const ORIG_MAX_BYTES = 50 * 1024 * 1024;
+  const ORIG_MAX_MB = 50;
   let busy = false;
 
   function escapeHtml(s) {
@@ -327,10 +333,17 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     }
     const existing = new Set(queue.map((q) => fileKey(q.file)));
     let added = 0;
+    /** @type {string[]} */
+    const tooHeavy = [];
     const catName = categoryLabel(categoryId);
     for (const file of files) {
       const key = fileKey(file);
       if (existing.has(key)) continue;
+      if (typeof file.size === 'number' && file.size > ORIG_MAX_BYTES) {
+        const mb = (file.size / (1024 * 1024)).toFixed(1);
+        tooHeavy.push(`${file.name} (${mb} MB)`);
+        continue;
+      }
       existing.add(key);
       queue.push({
         id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
@@ -340,12 +353,22 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       });
       added += 1;
     }
-    showError('');
-    showOk(
-      added
-        ? `Sumamos ${added} a la cola${categoryId ? ` · ${catName}` : ''}. Tocá “Subir evento” para mandarlas.`
-        : 'Esas fotos ya estaban en la cola',
-    );
+    if (tooHeavy.length) {
+      const sample = tooHeavy.slice(0, 3).join(', ');
+      const extra = tooHeavy.length > 3 ? ` y ${tooHeavy.length - 3} más` : '';
+      showError(
+        `${tooHeavy.length} foto(s) superan ${ORIG_MAX_MB} MB y no entraron a la cola: ${sample}${extra}. Exportalas más livianas e intentá de nuevo.`,
+      );
+    } else {
+      showError('');
+    }
+    if (added) {
+      showOk(
+        `Sumamos ${added} a la cola${categoryId ? ` · ${catName}` : ''}. Tocá “Subir evento” para mandarlas.`,
+      );
+    } else if (!tooHeavy.length) {
+      showOk('Esas fotos ya estaban en la cola');
+    }
     renderQueue();
   }
 
@@ -777,11 +800,10 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
           (uploadStatus.textContent = `Subiendo ${i + 1}/${items.length}: ${label}${
             item.categoryName ? ` · ${item.categoryName}` : ''
           }`);
-        // Límite bucket album-originals = 50MB (schema). 520 suele ser edge/timeout, no el JPG en sí.
-        const ORIG_MAX = 50 * 1024 * 1024;
-        if (typeof file.size === 'number' && file.size > ORIG_MAX) {
+        // Defensa por si algo entró a la cola sin el filtro (límite bucket = 50 MB).
+        if (typeof file.size === 'number' && file.size > ORIG_MAX_BYTES) {
           throw new Error(
-            `${file.name}: pesa ${(file.size / (1024 * 1024)).toFixed(1)} MB (máx. 50 MB). Exportá más liviana o bajá calidad y reintentá.`,
+            `${file.name}: pesa ${(file.size / (1024 * 1024)).toFixed(1)} MB (máx. ${ORIG_MAX_MB} MB). Exportá más liviana o bajá calidad y reintentá.`,
           );
         }
         const { previewBlob, width, height } = await makeWatermarkedPreview(file);
