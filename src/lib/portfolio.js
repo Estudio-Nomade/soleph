@@ -4,6 +4,7 @@
  */
 
 import { getSupabase, isSupabaseConfigured, publicStorageUrl, BUCKETS } from './supabase.js';
+import { formatStorageError, uploadWithRetry } from './storage-upload.js';
 
 export const PORTFOLIO_SETTINGS_KEY = 'portfolio';
 
@@ -154,11 +155,16 @@ export async function uploadPortfolioImage(file, folder = 'misc') {
     .replace(/[^a-z0-9_-]+/gi, '-')
     .slice(0, 40);
   const path = `portfolio/${safeFolder}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const { error } = await sb.storage.from(BUCKETS.covers).upload(path, file, {
+  const { error } = await uploadWithRetry(sb, BUCKETS.covers, path, file, {
     contentType: file.type || 'image/jpeg',
     upsert: false,
+    attempts: 4,
   });
-  if (error) throw error;
+  if (error) {
+    throw Object.assign(new Error(formatStorageError(error, { fileName: file.name, kind: 'cover' })), {
+      cause: error,
+    });
+  }
   return publicStorageUrl(BUCKETS.covers, path);
 }
 
