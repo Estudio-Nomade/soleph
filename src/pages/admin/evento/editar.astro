@@ -153,6 +153,11 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 <script>
   import { requireAdminOrRedirect, formatArs } from '../../../lib/admin-auth.js';
   import { getSupabase, publicStorageUrl, BUCKETS } from '../../../lib/supabase.js';
+  import {
+    fetchAlbumPhotos,
+    fetchPhotoCategoryLinks,
+    linksToPhotoCatMap,
+  } from '../../../lib/supabase-page.js';
   import { makeWatermarkedPreview, safeFileBase } from '../../../lib/watermark.js';
   import { indexPhotoFacesWithRetry, photoHasIndexedFaces } from '../../../lib/face.js';
   import { formatStorageError, uploadWithRetry } from '../../../lib/storage-upload.js';
@@ -446,15 +451,15 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     photoCatMap = {};
     if (!photos.length) return;
     const sb = getSupabase();
-    const ids = photos.map((p) => p.id);
-    const { data, error } = await sb.from('photo_categories').select('photo_id, category_id').in('photo_id', ids);
-    if (error) {
-      console.warn('photo_categories', error.message);
-      return;
-    }
-    for (const row of data || []) {
-      if (!photoCatMap[row.photo_id]) photoCatMap[row.photo_id] = [];
-      photoCatMap[row.photo_id].push(row.category_id);
+    try {
+      const links = await fetchPhotoCategoryLinks(sb, {
+        categoryIds: categories.map((c) => c.id).filter(Boolean),
+        photoIds: photos.map((p) => p.id),
+      });
+      photoCatMap = linksToPhotoCatMap(links);
+    } catch (err) {
+      console.warn('photo_categories', err?.message || err);
+      showError(err?.message || 'No se pudieron cargar las categorías de las fotos');
     }
   }
 
@@ -512,7 +517,8 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 
   async function setPhotoCategory(photoId, categoryId) {
     const sb = getSupabase();
-    await sb.from('photo_categories').delete().eq('photo_id', photoId);
+    const { error: delErr } = await sb.from('photo_categories').delete().eq('photo_id', photoId);
+    if (delErr) throw delErr;
     if (categoryId) {
       const { error } = await sb.from('photo_categories').insert({ photo_id: photoId, category_id: categoryId });
       if (error) throw error;
@@ -629,6 +635,67 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     }
   }
 
+  function photoGroupsForAdmin() {
+    /** @type {{ id: string, name: string, photos: any[] }[]} */
+    const groups = categories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      photos: photos.filter((p) => (photoCatMap[p.id] || []).includes(c.id)),
+    }));
+    const assigned = new Set(groups.flatMap((g) => g.photos.map((p) => p.id)));
+    const uncategorized = photos.filter((p) => !assigned.has(p.id));
+    if (uncategorized.length) {
+      groups.push({
+        id: '',
+        name: categories.length ? 'Sin categoría' : 'Todas',
+        photos: uncategorized,
+      });
+    }
+    return groups.filter((g) => g.photos.length > 0);
+  }
+
+  function makeAdminPhotoTile(p) {
+    const cover = album?.cover_path || '';
+    const url = publicStorageUrl(BUCKETS.previews, p.preview_path);
+    const isCover = cover && (cover === p.preview_path || cover.endsWith(p.preview_path));
+    const code =
+      p.code ||
+      cameraCodeFromFilename(p.source_filename || '') ||
+      (p.id || '').replace(/-/g, '').slice(0, 8).toUpperCase();
+    const currentCat = (photoCatMap[p.id] || [])[0] || '';
+    const catOpts =
+      '<option value="">Sin cat.</option>' +
+      categories
+        .map((c) => `<option value="${c.id}" ${c.id === currentCat ? 'selected' : ''}>${escapeHtml(c.name)}</option>`)
+        .join('');
+    const el = document.createElement('div');
+    el.className = 'admin-photo' + (isCover ? ' is-cover' : '');
+    el.innerHTML = `
+      <img src="${url}" alt="" loading="lazy" />
+      <span class="admin-photo-code" title="Número de cámara / código pedido">#${escapeHtml(code)}</span>
+      <div class="admin-photo-meta">
+        <select data-photo-cat="${p.id}" aria-label="Categoría">${catOpts}</select>
+      </div>
+      <div class="admin-photo-actions">
+        <button type="button" data-cover>Cover</button>
+        <button type="button" data-del>Borrar</button>
+      </div>
+    `;
+    el.querySelector('[data-cover]')?.addEventListener('click', () => setCover(p));
+    el.querySelector('[data-del]')?.addEventListener('click', () => deletePhoto(p));
+    el.querySelector('[data-photo-cat]')?.addEventListener('change', async (e) => {
+      try {
+        await setPhotoCategory(p.id, e.target.value || '');
+        showOk('Categoría actualizada');
+        renderPhotos();
+      } catch (err) {
+        showError(err?.message || 'No se pudo guardar categoría');
+        renderPhotos();
+      }
+    });
+    return el;
+  }
+
   function renderPhotos() {
     if (!photosEl) return;
     photosEl.innerHTML = '';
@@ -637,44 +704,27 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       return;
     }
     photosEmpty && (photosEmpty.hidden = true);
-    const cover = album?.cover_path || '';
-    for (const p of photos) {
-      const url = publicStorageUrl(BUCKETS.previews, p.preview_path);
-      const isCover = cover && (cover === p.preview_path || cover.endsWith(p.preview_path));
-      const code =
-        p.code ||
-        cameraCodeFromFilename(p.source_filename || '') ||
-        (p.id || '').replace(/-/g, '').slice(0, 8).toUpperCase();
-      const currentCat = (photoCatMap[p.id] || [])[0] || '';
-      const catOpts =
-        '<option value="">Sin cat.</option>' +
-        categories
-          .map((c) => `<option value="${c.id}" ${c.id === currentCat ? 'selected' : ''}>${escapeHtml(c.name)}</option>`)
-          .join('');
-      const el = document.createElement('div');
-      el.className = 'admin-photo' + (isCover ? ' is-cover' : '');
-      el.innerHTML = `
-        <img src="${url}" alt="" loading="lazy" />
-        <span class="admin-photo-code" title="Número de cámara / código pedido">#${escapeHtml(code)}</span>
-        <div class="admin-photo-meta">
-          <select data-photo-cat="${p.id}" aria-label="Categoría">${catOpts}</select>
-        </div>
-        <div class="admin-photo-actions">
-          <button type="button" data-cover>Cover</button>
-          <button type="button" data-del>Borrar</button>
-        </div>
-      `;
-      el.querySelector('[data-cover]')?.addEventListener('click', () => setCover(p));
-      el.querySelector('[data-del]')?.addEventListener('click', () => deletePhoto(p));
-      el.querySelector('[data-photo-cat]')?.addEventListener('change', async (e) => {
-        try {
-          await setPhotoCategory(p.id, e.target.value || '');
-          showOk('Categoría actualizada');
-        } catch (err) {
-          showError(err?.message || 'No se pudo guardar categoría');
-        }
-      });
-      photosEl.appendChild(el);
+    const groups = photoGroupsForAdmin();
+    const multi = groups.length > 1 || (groups.length === 1 && groups[0].id !== '');
+    if (!multi) {
+      const grid = document.createElement('div');
+      grid.className = 'admin-photos-grid';
+      for (const p of photos) grid.appendChild(makeAdminPhotoTile(p));
+      photosEl.appendChild(grid);
+      return;
+    }
+    for (const g of groups) {
+      const section = document.createElement('section');
+      section.className = 'admin-photo-group';
+      section.innerHTML = `<div class="admin-photo-group-head">
+        <h3>${escapeHtml(g.name)}</h3>
+        <span class="admin-muted">${g.photos.length} foto${g.photos.length === 1 ? '' : 's'}</span>
+      </div>`;
+      const grid = document.createElement('div');
+      grid.className = 'admin-photos-grid';
+      for (const p of g.photos) grid.appendChild(makeAdminPhotoTile(p));
+      section.appendChild(grid);
+      photosEl.appendChild(section);
     }
   }
 
@@ -855,7 +905,12 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
           try {
             await setPhotoCategory(row.id, item.categoryId);
           } catch (catErr) {
+            errors += 1;
+            const catMsg = catErr?.message || 'error al asignar categoría';
             console.warn('cat assign', catErr);
+            showError(
+              `Foto subida, pero sin categoría (${file.name} → ${item.categoryName || 'cat'}): ${catMsg}`,
+            );
           }
         }
 
@@ -1119,13 +1174,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       const { data: a, error: aErr } = await sb.from('albums').select('*').eq('id', albumId).single();
       if (aErr) throw aErr;
       album = a;
-      const { data: ph, error: pErr } = await sb
-        .from('photos')
-        .select('*')
-        .eq('album_id', albumId)
-        .order('sort_order', { ascending: true });
-      if (pErr) throw pErr;
-      photos = ph || [];
+      photos = await fetchAlbumPhotos(sb, albumId, '*');
       await loadCategories();
       await loadPhotoCategories();
       fillForm();

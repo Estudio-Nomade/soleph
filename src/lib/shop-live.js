@@ -4,6 +4,11 @@
  */
 
 import { getSupabase, isSupabaseConfigured, publicStorageUrl, BUCKETS } from './supabase.js';
+import {
+  fetchAlbumPhotos,
+  fetchPhotoCategoryLinks,
+  linksToPhotoCatMap,
+} from './supabase-page.js';
 
 /**
  * @param {string|null|undefined} coverPath
@@ -107,37 +112,32 @@ export async function getPublishedAlbum(albumId) {
   if (error) throw error;
   if (!album) return null;
 
-  const [{ data: photos, error: pErr }, { data: categories, error: cErr }] = await Promise.all([
-    sb
-      .from('photos')
-      .select('id, code, preview_path, sort_order, source_filename')
-      .eq('album_id', albumId)
-      .order('sort_order', { ascending: true }),
+  const [{ data: categories, error: cErr }, photos] = await Promise.all([
     sb
       .from('categories')
       .select('id, name, slug, sort_order')
       .eq('album_id', albumId)
       .order('sort_order', { ascending: true }),
+    fetchAlbumPhotos(sb, albumId, 'id, code, preview_path, sort_order, source_filename'),
   ]);
-  if (pErr) throw pErr;
   if (cErr) console.warn('categories', cErr.message);
 
+  const catList = categories || [];
   const photoIds = (photos || []).map((p) => p.id);
   /** @type {Record<string, string[]>} */
-  const photoCatMap = {};
+  let photoCatMap = {};
   if (photoIds.length) {
-    const { data: links, error: lErr } = await sb
-      .from('photo_categories')
-      .select('photo_id, category_id')
-      .in('photo_id', photoIds);
-    if (lErr) console.warn('photo_categories', lErr.message);
-    for (const row of links || []) {
-      if (!photoCatMap[row.photo_id]) photoCatMap[row.photo_id] = [];
-      photoCatMap[row.photo_id].push(row.category_id);
+    try {
+      const links = await fetchPhotoCategoryLinks(sb, {
+        categoryIds: catList.map((c) => c.id),
+        photoIds,
+      });
+      photoCatMap = linksToPhotoCatMap(links);
+    } catch (lErr) {
+      console.warn('photo_categories', lErr?.message || lErr);
     }
   }
 
-  const catList = categories || [];
   // bust preview CDN/browser cache when album meta changes (re-bake watermark)
   const albumBust = album.updated_at
     ? `?v=${encodeURIComponent(String(album.updated_at))}`
