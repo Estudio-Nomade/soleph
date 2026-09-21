@@ -351,8 +351,32 @@
 
 .admin-photos {
   display: grid;
+  gap: 1.25rem;
+}
+
+.admin-photos-grid {
+  display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 0.65rem;
+}
+
+.admin-photo-group {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.admin-photo-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.admin-photo-group-head h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--navy);
 }
 
 .admin-photo {
