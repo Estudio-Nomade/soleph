@@ -155,6 +155,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   import { getSupabase, publicStorageUrl, BUCKETS } from '../../../lib/supabase.js';
   import { makeWatermarkedPreview, safeFileBase } from '../../../lib/watermark.js';
   import { indexPhotoFacesWithRetry, photoHasIndexedFaces } from '../../../lib/face.js';
+  import { formatStorageError, uploadWithRetry } from '../../../lib/storage-upload.js';
   import {
     cameraCodeFromFilename,
     slugifyCategory,
@@ -776,6 +777,13 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
           (uploadStatus.textContent = `Subiendo ${i + 1}/${items.length}: ${label}${
             item.categoryName ? ` · ${item.categoryName}` : ''
           }`);
+        // Límite bucket album-originals = 50MB (schema). 520 suele ser edge/timeout, no el JPG en sí.
+        const ORIG_MAX = 50 * 1024 * 1024;
+        if (typeof file.size === 'number' && file.size > ORIG_MAX) {
+          throw new Error(
+            `${file.name}: pesa ${(file.size / (1024 * 1024)).toFixed(1)} MB (máx. 50 MB). Exportá más liviana o bajá calidad y reintentá.`,
+          );
+        }
         const { previewBlob, width, height } = await makeWatermarkedPreview(file);
         const camCode = uniqueCameraCode(cameraCodeFromFilename(file.name), usedCodes);
         const base = `${albumId}/${camCode}-${Date.now().toString(36)}-${safeFileBase(file.name)}`;
@@ -783,17 +791,44 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
         const originalPath = `${base}-full.${ext}`;
 
-        const upPrev = await sb.storage.from(BUCKETS.previews).upload(previewPath, previewBlob, {
+        const upPrev = await uploadWithRetry(sb, BUCKETS.previews, previewPath, previewBlob, {
           contentType: 'image/jpeg',
           upsert: false,
+          attempts: 4,
+          onRetry: ({ attempt, attempts, delayMs }) => {
+            uploadStatus &&
+              (uploadStatus.textContent = `Reintentando preview ${i + 1}/${items.length} (${attempt}/${attempts - 1})… ${label}`);
+            void delayMs;
+          },
         });
-        if (upPrev.error) throw upPrev.error;
+        if (upPrev.error) {
+          throw Object.assign(new Error(formatStorageError(upPrev.error, { fileName: file.name, kind: 'preview' })), {
+            cause: upPrev.error,
+          });
+        }
 
-        const upOrig = await sb.storage.from(BUCKETS.originals).upload(originalPath, file, {
+        const upOrig = await uploadWithRetry(sb, BUCKETS.originals, originalPath, file, {
           contentType: file.type || 'image/jpeg',
           upsert: false,
+          // originales de cámara pueden ser pesados → más paciencia ante 520/timeout
+          attempts: 5,
+          baseDelayMs: 1200,
+          onRetry: ({ attempt, attempts }) => {
+            uploadStatus &&
+              (uploadStatus.textContent = `Reintentando original ${i + 1}/${items.length} (${attempt}/${attempts - 1})… ${label}`);
+          },
         });
-        if (upOrig.error) throw upOrig.error;
+        if (upOrig.error) {
+          // si el preview ya subió y el original falla, limpiamos el preview huérfano
+          try {
+            await sb.storage.from(BUCKETS.previews).remove([previewPath]);
+          } catch {
+            /* best-effort */
+          }
+          throw Object.assign(new Error(formatStorageError(upOrig.error, { fileName: file.name, kind: 'original' })), {
+            cause: upOrig.error,
+          });
+        }
 
         const sort_order = startOrder + uploaded + 1;
         const insertPayload = {
@@ -861,9 +896,17 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         // drop from queue as we go
         queue = queue.filter((q) => q.id !== item.id);
         renderQueue();
+        // pequeña pausa entre fotos: menos 520 por ráfaga al edge de Supabase/CF
+        if (i + 1 < items.length) {
+          await new Promise((r) => setTimeout(r, 250));
+        }
       } catch (err) {
         errors += 1;
-        showError(`${file.name}: ${err?.message || 'error al subir'}`);
+        const msg =
+          err?.message && !/^HTTP\s+\d+/i.test(String(err.message))
+            ? String(err.message)
+            : formatStorageError(err, { fileName: file.name });
+        showError(msg);
       }
     }
 
@@ -942,11 +985,20 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
           if (dlErr) throw dlErr;
           if (!blob) throw new Error('Original vacío');
           const { previewBlob, width, height } = await makeWatermarkedPreview(blob);
-          const up = await sb.storage.from(BUCKETS.previews).upload(p.preview_path, previewBlob, {
+          const up = await uploadWithRetry(sb, BUCKETS.previews, p.preview_path, previewBlob, {
             contentType: 'image/jpeg',
             upsert: true,
+            attempts: 4,
+            onRetry: ({ attempt, attempts }) => {
+              uploadStatus &&
+                (uploadStatus.textContent = `Reintentando marca ${i + 1}/${withOrig.length} (${attempt}/${attempts - 1})… #${label}`);
+            },
           });
-          if (up.error) throw up.error;
+          if (up.error) {
+            throw Object.assign(new Error(formatStorageError(up.error, { kind: 'preview' })), {
+              cause: up.error,
+            });
+          }
           if (width && height) {
             const { error: metaErr } = await sb
               .from('photos')
