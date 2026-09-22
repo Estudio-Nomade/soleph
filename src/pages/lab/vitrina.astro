@@ -1,0 +1,392 @@
+---
+/**
+ * Lab local: comparar calidad de vitrina SIN subir a Supabase.
+ * Solo disponible en dev (npm run dev).
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const isDev = import.meta.env.DEV;
+---
+
+{
+  isDev ? (
+    <BaseLayout title="Lab vitrina · Soleph" description="Comparar compresión de previews (solo local)">
+      <main class="page lab-vitrina">
+        <header class="lab-head">
+          <p class="lab-kicker">Solo localhost · no sube nada a Supabase</p>
+          <h1>Lab vitrina</h1>
+          <p class="lab-lead">
+            Elegí una o varias fotos de tu disco. Se procesan <strong>en el navegador</strong> con la
+            misma marca de agua de la tienda. Así ves cómo se vería el álbum <em>sin guardar el
+            original</em> en la nube (modo ahorro).
+          </p>
+          <ul class="lab-bullets">
+            <li>
+              <strong>Vieja</strong> — 1600px · 82%
+            </li>
+            <li>
+              <strong>Vitrina</strong> — 1024px · 62% (admin ahora · un solo archivo)
+            </li>
+            <li>
+              <strong>Compacta</strong> — 900px · 58%
+            </li>
+            <li>
+              <strong>Grilla</strong> — 640px · 60% (solo thumb)
+            </li>
+          </ul>
+        </header>
+
+        <section class="lab-controls admin-card-like">
+          <label class="lab-file">
+            <span>Elegir fotos</span>
+            <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple data-lab-input />
+          </label>
+          <p class="lab-status" data-lab-status hidden></p>
+          <p class="lab-hint">
+            Tip: probá un JPG de cámara real. Abajo ves peso por preset y un total estimado a 1500
+            fotos. Clic en una imagen para verla grande.
+          </p>
+        </section>
+
+        <section class="lab-results" data-lab-results></section>
+      </main>
+
+      <div class="lab-lb" data-lab-lb hidden>
+        <button type="button" class="lab-lb-close" data-lab-lb-close aria-label="Cerrar">×</button>
+        <img data-lab-lb-img alt="" />
+        <p class="lab-lb-cap" data-lab-lb-cap></p>
+      </div>
+
+      <script>
+        import { makeWatermarkedPreview, PREVIEW_PRESETS } from '../../lib/watermark.js';
+
+        const input = document.querySelector('[data-lab-input]');
+        const status = document.querySelector('[data-lab-status]');
+        const results = document.querySelector('[data-lab-results]');
+        const lb = document.querySelector('[data-lab-lb]');
+        const lbImg = document.querySelector('[data-lab-lb-img]');
+        const lbCap = document.querySelector('[data-lab-lb-cap]');
+        const lbClose = document.querySelector('[data-lab-lb-close]');
+
+        const PRESET_ORDER = ['legacy', 'default', 'compact', 'thumb'];
+
+        function fmtBytes(n) {
+          if (n < 1024) return `${n} B`;
+          if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+          return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+        }
+
+        function setStatus(msg, show = true) {
+          if (!status) return;
+          status.hidden = !show;
+          status.textContent = msg || '';
+        }
+
+        function openLb(url, cap) {
+          if (!lb || !lbImg) return;
+          lbImg.src = url;
+          if (lbCap) lbCap.textContent = cap || '';
+          lb.hidden = false;
+        }
+
+        function closeLb() {
+          if (!lb || !lbImg) return;
+          lb.hidden = true;
+          lbImg.removeAttribute('src');
+        }
+
+        lbClose?.addEventListener('click', closeLb);
+        lb?.addEventListener('click', (e) => {
+          if (e.target === lb) closeLb();
+        });
+        window.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') closeLb();
+        });
+
+        /**
+ * @param {File} file
+ */
+        async function processFile(file) {
+          const section = document.createElement('article');
+          section.className = 'lab-file-block';
+          const title = document.createElement('h2');
+          title.textContent = file.name;
+          const meta = document.createElement('p');
+          meta.className = 'lab-file-meta';
+          meta.textContent = `Original en disco: ${fmtBytes(file.size)} · no se sube a ningún lado`;
+          const grid = document.createElement('div');
+          grid.className = 'lab-grid';
+          section.append(title, meta, grid);
+
+          const sizes = [];
+
+          for (const key of PRESET_ORDER) {
+            const preset = PREVIEW_PRESETS[key];
+            const card = document.createElement('div');
+            card.className = 'lab-card';
+            if (key === 'default') card.classList.add('lab-card--pick');
+
+            const head = document.createElement('div');
+            head.className = 'lab-card-head';
+            head.innerHTML = `<strong>${preset.label}</strong>${
+              key === 'default' ? '<span class="lab-badge">Admin ahora</span>' : ''
+            }`;
+
+            const imgWrap = document.createElement('button');
+            imgWrap.type = 'button';
+            imgWrap.className = 'lab-card-img';
+            const img = document.createElement('img');
+            img.alt = preset.label;
+            img.loading = 'lazy';
+            imgWrap.append(img);
+
+            const foot = document.createElement('p');
+            foot.className = 'lab-card-foot';
+            foot.textContent = 'Procesando…';
+
+            card.append(head, imgWrap, foot);
+            grid.append(card);
+
+            try {
+              const { previewBlob, width, height, maxEdge, quality } = await makeWatermarkedPreview(file, {
+                maxEdge: preset.maxEdge,
+                quality: preset.quality,
+              });
+              const url = URL.createObjectURL(previewBlob);
+              img.src = url;
+              const est1500 = (previewBlob.size * 1500) / (1024 * 1024);
+              sizes.push({ key, bytes: previewBlob.size });
+              foot.innerHTML = `${width}×${height} · <strong>${fmtBytes(previewBlob.size)}</strong><br/><span class="lab-est">×1500 ≈ <strong>${est1500.toFixed(1)} MB</strong> solo vitrina</span>`;
+              imgWrap.addEventListener('click', () =>
+                openLb(url, `${file.name} · ${preset.label} · ${fmtBytes(previewBlob.size)} · q${quality} · ≤${maxEdge}px`),
+              );
+            } catch (err) {
+              foot.textContent = err?.message || 'Error al procesar';
+              foot.classList.add('lab-err');
+            }
+          }
+
+          if (sizes.length) {
+            const sum = document.createElement('p');
+            sum.className = 'lab-compare';
+            const leg = sizes.find((s) => s.key === 'legacy');
+            const def = sizes.find((s) => s.key === 'default');
+            if (leg && def && leg.bytes > 0) {
+              const pct = Math.round((1 - def.bytes / leg.bytes) * 100);
+              sum.textContent =
+                pct > 0
+                  ? `Vitrina vs anterior en este archivo: ~${pct}% más liviana (y sin original en la nube).`
+                  : 'Vitrina y anterior salieron parecidas en peso en este archivo.';
+            }
+            section.append(sum);
+          }
+
+          return section;
+        }
+
+        input?.addEventListener('change', async () => {
+          const files = [...(input.files || [])];
+          results.innerHTML = '';
+          if (!files.length) {
+            setStatus('', false);
+            return;
+          }
+          setStatus(`Procesando ${files.length} foto(s) en tu navegador…`);
+          for (let i = 0; i < files.length; i += 1) {
+            setStatus(`Procesando ${i + 1}/${files.length}: ${files[i].name}`);
+            const block = await processFile(files[i]);
+            results.append(block);
+          }
+          setStatus(`Listo · ${files.length} foto(s). Nada se subió a Supabase.`);
+        });
+      </script>
+
+      <style is:global>
+        .lab-vitrina {
+          max-width: 1100px;
+          margin: 0 auto;
+          padding: 1.25rem 1rem 3rem;
+        }
+        .lab-kicker {
+          font-size: 0.8rem;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: #546e87;
+          margin: 0 0 0.35rem;
+        }
+        .lab-vitrina h1 {
+          font-family: Georgia, 'Times New Roman', serif;
+          color: #012b55;
+          margin: 0 0 0.5rem;
+          font-size: 1.75rem;
+        }
+        .lab-lead {
+          color: #243447;
+          line-height: 1.45;
+          margin: 0 0 0.75rem;
+          max-width: 42rem;
+        }
+        .lab-bullets {
+          margin: 0 0 1.25rem;
+          padding-left: 1.2rem;
+          color: #3d4f61;
+          font-size: 0.95rem;
+        }
+        .lab-controls {
+          border: 1px solid #c9d4e0;
+          background: #f7f9fb;
+          padding: 1rem 1.1rem;
+          margin-bottom: 1.5rem;
+        }
+        .lab-file span {
+          display: block;
+          font-weight: 700;
+          color: #012b55;
+          margin-bottom: 0.4rem;
+        }
+        .lab-file input {
+          display: block;
+          width: 100%;
+          max-width: 28rem;
+        }
+        .lab-status {
+          margin: 0.75rem 0 0;
+          color: #012b55;
+          font-weight: 600;
+        }
+        .lab-hint {
+          margin: 0.5rem 0 0;
+          font-size: 0.88rem;
+          color: #546e87;
+        }
+        .lab-file-block {
+          margin-bottom: 2rem;
+          padding-bottom: 1.5rem;
+          border-bottom: 1px solid #e2e8f0;
+        }
+        .lab-file-block h2 {
+          font-size: 1.05rem;
+          color: #012b55;
+          margin: 0 0 0.25rem;
+          word-break: break-all;
+        }
+        .lab-file-meta {
+          margin: 0 0 0.85rem;
+          font-size: 0.88rem;
+          color: #546e87;
+        }
+        .lab-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+          gap: 0.85rem;
+        }
+        .lab-card {
+          border: 1px solid #c9d4e0;
+          background: #fff;
+          overflow: hidden;
+        }
+        .lab-card--pick {
+          border-color: #012b55;
+          box-shadow: 0 0 0 1px #012b55;
+        }
+        .lab-card-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.35rem;
+          padding: 0.45rem 0.55rem;
+          background: #f4f7fa;
+          font-size: 0.78rem;
+          color: #012b55;
+        }
+        .lab-badge {
+          background: #012b55;
+          color: #fff;
+          font-size: 0.65rem;
+          padding: 0.12rem 0.35rem;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+        .lab-card-img {
+          display: block;
+          width: 100%;
+          padding: 0;
+          border: 0;
+          background: #1a2430;
+          cursor: zoom-in;
+          aspect-ratio: 1;
+          overflow: hidden;
+        }
+        .lab-card-img img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+        .lab-card-foot {
+          margin: 0;
+          padding: 0.45rem 0.55rem 0.55rem;
+          font-size: 0.78rem;
+          color: #3d4f61;
+          line-height: 1.35;
+        }
+        .lab-est {
+          color: #546e87;
+        }
+        .lab-err {
+          color: #a12b2b;
+        }
+        .lab-compare {
+          margin: 0.75rem 0 0;
+          font-size: 0.9rem;
+          color: #012b55;
+          font-weight: 600;
+        }
+        .lab-lb {
+          position: fixed;
+          inset: 0;
+          z-index: 80;
+          background: rgba(1, 20, 40, 0.88);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 1.5rem;
+        }
+        .lab-lb[hidden] {
+          display: none !important;
+        }
+        .lab-lb img {
+          max-width: min(96vw, 1100px);
+          max-height: 82vh;
+          object-fit: contain;
+          background: #000;
+        }
+        .lab-lb-cap {
+          color: #e8eef5;
+          margin: 0.65rem 0 0;
+          font-size: 0.88rem;
+          text-align: center;
+        }
+        .lab-lb-close {
+          position: absolute;
+          top: 0.75rem;
+          right: 1rem;
+          border: 0;
+          background: transparent;
+          color: #fff;
+          font-size: 2rem;
+          line-height: 1;
+          cursor: pointer;
+        }
+      </style>
+    </BaseLayout>
+  ) : (
+    <BaseLayout title="No disponible">
+      <main class="page" style="padding:2rem;text-align:center">
+        <p>El lab de vitrina solo corre en <code>npm run dev</code> (localhost).</p>
+        <p><a href="/">Volver</a></p>
+      </main>
+    </BaseLayout>
+  )
+}

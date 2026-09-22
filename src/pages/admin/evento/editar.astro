@@ -100,8 +100,13 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
           hasta que toques <strong>Subir evento</strong> (guarda datos, sube archivos e indexa caras).
         </p>
         <p class="admin-muted" style="margin-top:0.35rem">
-          <strong>Peso máximo: 50&nbsp;MB por foto</strong> (JPG o PNG). Si alguna pesa más, exportala
-          más liviana antes de subir. Con muchas fotos grandes conviene ir de a tandas.
+          <strong>Peso máximo: 50&nbsp;MB por foto</strong> al leerlas de tu compu (JPG o PNG). Si alguna
+          pesa más, exportala más liviana antes. Con muchas fotos grandes conviene ir de a tandas.
+        </p>
+        <p class="admin-muted" style="margin-top:0.35rem">
+          <strong>Modo vitrina:</strong> a la web solo sube un JPEG comprimido con marca de agua
+          (~1024px, para mirar y elegir). <strong>No se guarda el original de cámara</strong> —
+          ese lo mandás vos al cliente por fuera cuando confirma el pago.
         </p>
 
         <div class="admin-upload-cats" data-upload-cats></div>
@@ -128,8 +133,8 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
           </button>
         </div>
         <p class="admin-muted" style="margin-top:0">
-          Vuelve a marcar los previews con <strong>un solo logo</strong> (desde el original).
-          Hace falta si las fotos se subieron con el patrón viejo de logos chicos.
+          Vuelve a marcar los previews con <strong>un solo logo</strong> (solo fotos viejas que
+          todavía tienen original en la nube). Los eventos nuevos en modo vitrina no guardan original.
         </p>
         <div class="admin-photos" data-photos style="margin-top:0.5rem"></div>
         <p class="admin-empty" data-photos-empty hidden>Todavía no hay fotos subidas.</p>
@@ -207,9 +212,11 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
    * @type {{ id: string, file: File, categoryId: string, categoryName: string }[]}
    */
   let queue = [];
-  /** Límite bucket album-originals (supabase/schema.sql). */
+  /** Límite al encolar desde la compu (el preview vitrina sale mucho más chico). */
   const ORIG_MAX_BYTES = 50 * 1024 * 1024;
   const ORIG_MAX_MB = 50;
+  /** Producto: tienda = vitrina. No subir JPG de cámara a album-originals. */
+  const STOREFRONT_PREVIEWS_ONLY = true;
   let busy = false;
 
   function escapeHtml(s) {
@@ -860,8 +867,6 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         const camCode = uniqueCameraCode(cameraCodeFromFilename(file.name), usedCodes);
         const base = `${albumId}/${camCode}-${Date.now().toString(36)}-${safeFileBase(file.name)}`;
         const previewPath = `${base}-wm.jpg`;
-        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-        const originalPath = `${base}-full.${ext}`;
 
         const upPrev = await uploadWithRetry(sb, BUCKETS.previews, previewPath, previewBlob, {
           contentType: 'image/jpeg',
@@ -879,27 +884,31 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
           });
         }
 
-        const upOrig = await uploadWithRetry(sb, BUCKETS.originals, originalPath, file, {
-          contentType: file.type || 'image/jpeg',
-          upsert: false,
-          // originales de cámara pueden ser pesados → más paciencia ante 520/timeout
-          attempts: 5,
-          baseDelayMs: 1200,
-          onRetry: ({ attempt, attempts }) => {
-            uploadStatus &&
-              (uploadStatus.textContent = `Reintentando original ${i + 1}/${items.length} (${attempt}/${attempts - 1})… ${label}`);
-          },
-        });
-        if (upOrig.error) {
-          // si el preview ya subió y el original falla, limpiamos el preview huérfano
-          try {
-            await sb.storage.from(BUCKETS.previews).remove([previewPath]);
-          } catch {
-            /* best-effort */
-          }
-          throw Object.assign(new Error(formatStorageError(upOrig.error, { fileName: file.name, kind: 'original' })), {
-            cause: upOrig.error,
+        // Modo vitrina: no subimos el JPG de cámara. Sole entrega por fuera.
+        let originalPath = null;
+        if (!STOREFRONT_PREVIEWS_ONLY) {
+          const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+          originalPath = `${base}-full.${ext}`;
+          const upOrig = await uploadWithRetry(sb, BUCKETS.originals, originalPath, file, {
+            contentType: file.type || 'image/jpeg',
+            upsert: false,
+            attempts: 5,
+            baseDelayMs: 1200,
+            onRetry: ({ attempt, attempts }) => {
+              uploadStatus &&
+                (uploadStatus.textContent = `Reintentando original ${i + 1}/${items.length} (${attempt}/${attempts - 1})… ${label}`);
+            },
           });
+          if (upOrig.error) {
+            try {
+              await sb.storage.from(BUCKETS.previews).remove([previewPath]);
+            } catch {
+              /* best-effort */
+            }
+            throw Object.assign(new Error(formatStorageError(upOrig.error, { fileName: file.name, kind: 'original' })), {
+              cause: upOrig.error,
+            });
+          }
         }
 
         const sort_order = startOrder + uploaded + 1;
@@ -1032,12 +1041,14 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     if (busy) return;
     const withOrig = photos.filter((p) => p.original_path && p.preview_path);
     if (!withOrig.length) {
-      showError('No hay fotos con original para remarcar.');
+      showError(
+        'No hay originales en la nube para remarcar. Los eventos nuevos solo guardan la vitrina (marca de agua). Si hace falta otro logo, re-subí las fotos.',
+      );
       return;
     }
     if (
       !confirm(
-        `¿Actualizar la marca de agua de ${withOrig.length} foto(s)? Usa el original y deja un solo logo grande. Puede tardar un rato.`,
+        `¿Actualizar la marca de agua de ${withOrig.length} foto(s)? Usa el original guardado (eventos viejos) y deja un solo logo grande. Puede tardar un rato.`,
       )
     ) {
       return;

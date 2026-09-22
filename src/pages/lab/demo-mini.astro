@@ -1,0 +1,298 @@
+---
+/**
+ * Demo local: álbum Soleph con previews MINI (480px).
+ * Solo útil en dev — procesa en el browser, no sube a Supabase.
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const isDev = import.meta.env.DEV;
+
+const demoSources = [
+  '/images/projects/la-makeka/01.jpg',
+  '/images/projects/la-makeka/02.jpg',
+  '/images/projects/la-makeka/03.jpg',
+  '/images/projects/la-makeka/04.jpg',
+  '/images/projects/la-makeka/05.jpg',
+  '/images/projects/la-makeka/06.jpg',
+  '/images/projects/la-makeka/07.jpg',
+  '/images/projects/la-makeka/08.jpg',
+  '/images/projects/la-makeka/09.jpg',
+  '/images/projects/la-makeka/10.jpg',
+  '/images/projects/la-makeka/11.jpg',
+  '/images/projects/la-makeka/12.jpg',
+  '/images/projects/cordillera/01.jpg',
+  '/images/projects/cordillera/02.jpg',
+  '/images/projects/cordillera/03.jpg',
+  '/images/projects/cordillera/04.jpg',
+  '/images/projects/paisajes/01.jpg',
+  '/images/projects/paisajes/02.jpg',
+  '/images/projects/paisajes/03.jpg',
+  '/images/projects/paisajes/04.jpg',
+];
+---
+
+{
+  isDev ? (
+    <BaseLayout
+      title="Demo 720 · Soleph"
+      description="Simulación de álbum con previews 720px (solo localhost)"
+    >
+      <main class="page" data-lab-mini-album>
+        <p class="lab-demo-banner">
+          <strong>Demo localhost</strong> · vitrina <strong>720px · 68%</strong> (antes 480 se veía mal) · no
+          sube nada a Supabase ·
+          <a href="/lab/vitrina">comparar calidades</a>
+        </p>
+
+        <header class="page-header">
+          <h1>LA MAKEKA · demo 720</h1>
+          <p>Así se vería un evento si en la nube solo guardamos la versión de vitrina a 720px.</p>
+        </header>
+
+        <div class="album-top">
+          <p class="lead">
+            Alta resolución la mandamos por fuera cuando confirmamos la transferencia. Acá solo mirás y
+            elegís (marca de agua).
+          </p>
+          <div class="price-tiers" aria-label="Precios">
+            <span>1 foto · $3.500</span>
+            <span>3 · $9.000</span>
+            <span>5 · $13.000</span>
+            <span>10 · $23.000</span>
+          </div>
+        </div>
+
+        <div class="shop-tools shop-tools--row" style="margin-bottom:1rem;">
+          <div class="cat-chips" role="tablist" aria-label="Categorías">
+            <button type="button" class="cat-chip is-on" data-chip="" aria-pressed="true">Todas</button>
+            <button type="button" class="cat-chip" data-chip="mansos" aria-pressed="false">Mansos</button>
+            <button type="button" class="cat-chip" data-chip="potros" aria-pressed="false">Potros</button>
+            <button type="button" class="cat-chip" data-chip="damas" aria-pressed="false">Damas</button>
+          </div>
+          <a class="btn btn-ghost" href="/tienda/carrito">Ir al carrito</a>
+        </div>
+        <p class="face-hint" style="margin:0 0 0.75rem">
+          Tocá la foto para agrandarla. Marcá el cuadrado para elegir una o varias y después
+          <strong>Agregar al carrito</strong>.
+        </p>
+
+        <p class="form-note" data-mini-status>Generando previews 720px en tu navegador…</p>
+        <p class="form-note" data-mini-stats hidden></p>
+
+        <div data-album-sections></div>
+        <p class="face-hint" data-mini-empty hidden>No se pudieron armar las fotos de demo.</p>
+      </main>
+
+      <script is:inline define:vars={{ demoSources, isDev }}>
+        window.__SOLEPH_LAB_MINI__ = { demoSources, isDev };
+      </script>
+      <script>
+        import { makeWatermarkedPreview, PREVIEW_PRESETS } from '../../lib/watermark.js';
+        import { bindPhotoTile, ensureSelectBar, paintAllTiles } from '../../scripts/shop-select.js';
+
+        const cfg = window.__SOLEPH_LAB_MINI__ || {};
+        if (!cfg.isDev) {
+          /* prod: página vacía aparte */
+        } else {
+          const demoSources = cfg.demoSources || [];
+          const root = document.querySelector('[data-lab-mini-album]');
+          const statusEl = root?.querySelector('[data-mini-status]');
+          const statsEl = root?.querySelector('[data-mini-stats]');
+          const sectionsEl = root?.querySelector('[data-album-sections]');
+          const emptyEl = root?.querySelector('[data-mini-empty]');
+          const chips = [...(root?.querySelectorAll('[data-chip]') || [])];
+
+          const ALBUM = {
+            id: 'lab-mini-demo',
+            name: 'LA MAKEKA · demo 720',
+          };
+          const UNIT = 3500;
+          const cats = [
+            { id: 'mansos', name: 'Mansos' },
+            { id: 'potros', name: 'Potros' },
+            { id: 'damas', name: 'Damas' },
+          ];
+
+          /** @type {{ id: string, code: string, src: string, thumb: string, categoryId: string, bytes: number }[]} */
+          let photos = [];
+          let activeCat = '';
+
+          ensureSelectBar();
+
+          function escapeHtml(s) {
+            return String(s)
+              .replaceAll('&', '&amp;')
+              .replaceAll('<', '&lt;')
+              .replaceAll('>', '&gt;')
+              .replaceAll('"', '&quot;');
+          }
+
+          function fmtBytes(n) {
+            if (n < 1024) return `${n} B`;
+            if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+            return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+          }
+
+          function makeTile(photo) {
+            const el = document.createElement('div');
+            el.className = 'photo-tile';
+            el.dataset.photo = '';
+            el.dataset.id = photo.id;
+            el.dataset.code = photo.code;
+            el.dataset.src = photo.src;
+            el.dataset.thumb = photo.thumb;
+            el.dataset.albumId = ALBUM.id;
+            el.dataset.albumName = ALBUM.name;
+            el.dataset.unit = String(UNIT);
+            el.dataset.cat = photo.categoryId;
+            el.dataset.wm = 'off';
+            el.innerHTML = `
+              <button type="button" class="photo-tile-open" data-open-photo aria-label="Ver #${escapeHtml(photo.code)} en grande">
+                <img src="${escapeHtml(photo.thumb)}" alt="#${escapeHtml(photo.code)}" loading="lazy" width="720" height="720" />
+              </button>
+              <span class="photo-code-badge" title="Código de la foto">#${escapeHtml(photo.code)}</span>
+              <label class="photo-check" title="Elegir foto">
+                <input type="checkbox" data-select />
+                <span class="photo-check-box" aria-hidden="true"></span>
+              </label>
+              <span class="photo-in-cart" data-in-cart-mark hidden>En carrito</span>
+            `;
+            bindPhotoTile(el, root || document);
+            return el;
+          }
+
+          function render() {
+            if (!sectionsEl) return;
+            sectionsEl.innerHTML = '';
+            const list = activeCat ? photos.filter((p) => p.categoryId === activeCat) : photos;
+            if (!list.length) {
+              if (emptyEl) emptyEl.hidden = false;
+              return;
+            }
+            if (emptyEl) emptyEl.hidden = true;
+
+            if (!activeCat) {
+              for (const cat of cats) {
+                const group = photos.filter((p) => p.categoryId === cat.id);
+                if (!group.length) continue;
+                const sec = document.createElement('section');
+                sec.className = 'album-cat-section';
+                sec.innerHTML = `<div class="album-cat-head"><h2>${escapeHtml(cat.name)}</h2></div>`;
+                const grid = document.createElement('div');
+                grid.className = 'photo-grid';
+                for (const p of group) grid.append(makeTile(p));
+                sec.append(grid);
+                sectionsEl.append(sec);
+              }
+            } else {
+              const grid = document.createElement('div');
+              grid.className = 'photo-grid';
+              for (const p of list) grid.append(makeTile(p));
+              sectionsEl.append(grid);
+            }
+            paintAllTiles(root || document);
+          }
+
+          chips.forEach((btn) => {
+            btn.addEventListener('click', () => {
+              activeCat = btn.getAttribute('data-chip') || '';
+              chips.forEach((b) => {
+                const on = b === btn;
+                b.classList.toggle('is-on', on);
+                b.setAttribute('aria-pressed', on ? 'true' : 'false');
+              });
+              render();
+            });
+          });
+
+          async function loadOne(src, index) {
+            const res = await fetch(src);
+            if (!res.ok) throw new Error(`HTTP ${res.status} ${src}`);
+            const blob = await res.blob();
+            const preset = PREVIEW_PRESETS.thumb;
+            const { previewBlob } = await makeWatermarkedPreview(blob, {
+              maxEdge: preset.maxEdge,
+              quality: preset.quality,
+            });
+            const url = URL.createObjectURL(previewBlob);
+            const cat = cats[index % cats.length];
+            return {
+              id: `mini-${index}`,
+              code: String(1000 + index),
+              src: url,
+              thumb: url,
+              categoryId: cat.id,
+              bytes: previewBlob.size,
+            };
+          }
+
+          (async () => {
+            const out = [];
+            for (let i = 0; i < demoSources.length; i += 1) {
+              if (statusEl) {
+                statusEl.hidden = false;
+                statusEl.textContent = `Generando 720 ${i + 1}/${demoSources.length}…`;
+              }
+              try {
+                out.push(await loadOne(demoSources[i], i));
+              } catch (err) {
+                console.warn('720 demo skip', demoSources[i], err);
+              }
+            }
+            photos = out;
+            if (statusEl) {
+              statusEl.hidden = true;
+              statusEl.textContent = '';
+            }
+            if (!photos.length) {
+              if (emptyEl) emptyEl.hidden = false;
+              if (statusEl) {
+                statusEl.hidden = false;
+                statusEl.textContent = 'No se pudo generar ninguna preview. Abrí la consola.';
+              }
+              return;
+            }
+            const total = photos.reduce((a, p) => a + p.bytes, 0);
+            const avg = total / photos.length;
+            const est1500 = (avg * 1500) / (1024 * 1024);
+            if (statsEl) {
+              statsEl.hidden = false;
+              statsEl.innerHTML = `Listo · <strong>${photos.length} fotos a 720px</strong> · promedio <strong>${fmtBytes(avg)}</strong> c/u · ×1500 ≈ <strong>${est1500.toFixed(0)} MB</strong> de vitrina (sin originales). Lightbox usa el mismo 720.`;
+            }
+            render();
+          })().catch((err) => {
+            console.error(err);
+            if (statusEl) {
+              statusEl.hidden = false;
+              statusEl.textContent = err?.message || 'Error en demo mini';
+            }
+          });
+        }
+      </script>
+
+      <style is:global>
+        .lab-demo-banner {
+          margin: 0 0 1.25rem;
+          padding: 0.65rem 0.85rem;
+          background: #012b55;
+          color: #eef3f8;
+          font-size: 0.9rem;
+          line-height: 1.4;
+        }
+        .lab-demo-banner a {
+          color: #fff;
+          text-decoration: underline;
+        }
+      </style>
+    </BaseLayout>
+  ) : (
+    <BaseLayout title="No disponible">
+      <main class="page" style="padding:2rem;text-align:center">
+        <p>Demo mini solo en <code>npm run dev</code>.</p>
+        <p>
+          <a href="/">Volver</a>
+        </p>
+      </main>
+    </BaseLayout>
+  )
+}

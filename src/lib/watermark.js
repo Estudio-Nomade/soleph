@@ -1,10 +1,26 @@
 /**
  * Preview con marca de agua del logo (browser, sin backend).
- * Original se sube aparte al bucket privado.
+ * Modo vitrina: solo se sube este JPEG liviano a la tienda.
+ * El original de cámara no va a Supabase (Sole lo entrega por fuera).
  */
 
 const LOGO_SRC = '/images/logosinfondo.png';
 const LOGO_FALLBACK = '/images/logo.png';
+
+/**
+ * Presets de vitrina (la gente mira / elige; no es la entrega final).
+ * `default` = lo que usa el admin al subir.
+ */
+export const PREVIEW_PRESETS = {
+  /** Referencia vieja (pesada) */
+  legacy: { maxEdge: 1600, quality: 0.82, label: 'Vieja (1600 · 82%)' },
+  /** Un solo archivo de vitrina: <1280, JPEG más apretado */
+  default: { maxEdge: 1024, quality: 0.62, label: 'Vitrina (1024 · 62%)' },
+  /** Todavía más chica si hace falta */
+  compact: { maxEdge: 900, quality: 0.58, label: 'Compacta (900 · 58%)' },
+  /** Solo grilla / dual (no usar sola en lightbox) */
+  thumb: { maxEdge: 640, quality: 0.6, label: 'Grilla (640 · 60%)' },
+};
 
 /** @type {HTMLImageElement | null} */
 let logoCache = null;
@@ -36,12 +52,13 @@ async function getLogoImage() {
 
 /**
  * @param {File|Blob} file
- * @param {{ maxEdge?: number, quality?: number, logoSrc?: string }} [opts]
- * @returns {Promise<{ previewBlob: Blob, width: number, height: number, originalFile: File|Blob }>}
+ * @param {{ maxEdge?: number, quality?: number, logoSrc?: string, preset?: keyof typeof PREVIEW_PRESETS }} [opts]
+ * @returns {Promise<{ previewBlob: Blob, width: number, height: number, originalFile: File|Blob, maxEdge: number, quality: number }>}
  */
 export async function makeWatermarkedPreview(file, opts = {}) {
-  const maxEdge = opts.maxEdge ?? 1600;
-  const quality = opts.quality ?? 0.82;
+  const preset = opts.preset ? PREVIEW_PRESETS[opts.preset] : null;
+  const maxEdge = opts.maxEdge ?? preset?.maxEdge ?? PREVIEW_PRESETS.default.maxEdge;
+  const quality = opts.quality ?? preset?.quality ?? PREVIEW_PRESETS.default.quality;
 
   const bitmap = await loadBitmap(file);
   const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
@@ -62,7 +79,7 @@ export async function makeWatermarkedPreview(file, opts = {}) {
   drawLogoWatermark(ctx, logo, width, height);
 
   const previewBlob = await canvasToJpeg(canvas, quality);
-  return { previewBlob, width, height, originalFile: file };
+  return { previewBlob, width, height, originalFile: file, maxEdge, quality };
 }
 
 /**
