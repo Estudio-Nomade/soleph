@@ -7,6 +7,9 @@
   <div class="lightbox-stage" data-lightbox-stage data-wm="css">
     <img src="" alt="" data-lightbox-img draggable="false" />
     <span class="wm-overlay wm-overlay--lightbox" data-lightbox-wm aria-hidden="true"></span>
+    <div class="lb-face-layer" data-lightbox-faces hidden></div>
+    <div class="lb-face-loading" data-lightbox-face-loading hidden>Detectando caras…</div>
+    <p class="lb-face-hint" data-lightbox-face-hint hidden>Tocá un recuadro para ver más fotos de esa persona</p>
   </div>
   <button type="button" class="nav next" data-lightbox-next aria-label="Siguiente">›</button>
 </div>
@@ -14,51 +17,206 @@
 <script>
   const root = document.querySelector('[data-lightbox]');
   const stage = document.querySelector('[data-lightbox-stage]');
-  const img = document.querySelector('[data-lightbox-img]');
-  let sources = [];
+  const img = /** @type {HTMLImageElement | null} */ (document.querySelector('[data-lightbox-img]'));
+  const faceLayer = /** @type {HTMLElement | null} */ (document.querySelector('[data-lightbox-faces]'));
+  const faceLoading = document.querySelector('[data-lightbox-face-loading]');
+  const faceHint = document.querySelector('[data-lightbox-face-hint]');
+
+  /** @type {{ src: string, photoId?: string, meta?: Record<string, unknown> }[]} */
+  let items = [];
   let index = 0;
+  /** @type {((item: { src: string, photoId?: string }, index: number) => void) | null} */
+  let onChange = null;
+  /** @type {((face: { left: number, top: number, width: number, height: number }, item: { src: string, photoId?: string }, index: number) => void) | null} */
+  let onFaceClick = null;
+  let facesEnabled = false;
+  /** @type {{ left: number, top: number, width: number, height: number }[]} */
+  let currentFaces = [];
 
   /**
-   * @param {string[]} list
+   * @param {string[] | { src: string, photoId?: string, meta?: Record<string, unknown> }[]} list
    * @param {number} [start]
-   * @param {{ wm?: 'css' | 'off' }} [opts]
-   *   wm='css' → un logo CSS encima (series estáticas / previews sin bake)
-   *   wm='off' → la imagen ya trae un logo horneado (eventos live)
+   * @param {{
+   *   wm?: 'css' | 'off',
+   *   faces?: boolean,
+   *   onChange?: typeof onChange,
+   *   onFaceClick?: typeof onFaceClick,
+   * }} [opts]
    */
   function open(list, start = 0, opts = {}) {
-    sources = (list || []).filter(Boolean);
-    if (!sources.length) return;
-    index = Math.max(0, Math.min(start, sources.length - 1));
+    items = (list || [])
+      .map((entry) => {
+        if (typeof entry === 'string') return { src: entry };
+        if (entry && entry.src) return entry;
+        return null;
+      })
+      .filter(Boolean);
+    if (!items.length) return;
+    index = Math.max(0, Math.min(start, items.length - 1));
     const wm = opts?.wm === 'off' ? 'off' : 'css';
     if (stage) stage.setAttribute('data-wm', wm);
+    facesEnabled = !!opts?.faces;
+    onChange = typeof opts?.onChange === 'function' ? opts.onChange : null;
+    onFaceClick = typeof opts?.onFaceClick === 'function' ? opts.onFaceClick : null;
+    clearFaces();
+    setFaceLoading(false);
+    if (faceHint) faceHint.hidden = true;
     show();
     root?.classList.add('is-open');
     root?.setAttribute('aria-hidden', 'false');
     document.body.classList.add('lightbox-open');
+    notifyChange();
   }
 
   function close() {
     root?.classList.remove('is-open');
     root?.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('lightbox-open');
+    clearFaces();
+    setFaceLoading(false);
+    if (faceHint) faceHint.hidden = true;
   }
 
   function show() {
-    if (!img || !sources.length) return;
-    img.setAttribute('src', sources[index]);
+    if (!img || !items.length) return;
+    clearFaces();
+    setFaceLoading(false);
+    if (faceHint) faceHint.hidden = true;
+    const src = items[index].src;
+    // force reload path so load event + face detect re-run on same src
+    if (img.getAttribute('src') === src) {
+      img.removeAttribute('src');
+    }
+    img.setAttribute('src', src);
+  }
+
+  function notifyChange() {
+    if (!items.length) return;
+    onChange?.(items[index], index);
   }
 
   function next() {
-    if (!sources.length) return;
-    index = (index + 1) % sources.length;
+    if (!items.length) return;
+    index = (index + 1) % items.length;
     show();
+    notifyChange();
   }
 
   function prev() {
-    if (!sources.length) return;
-    index = (index - 1 + sources.length) % sources.length;
+    if (!items.length) return;
+    index = (index - 1 + items.length) % items.length;
     show();
+    notifyChange();
   }
+
+  function current() {
+    return items[index] || null;
+  }
+
+  function getIndex() {
+    return index;
+  }
+
+  /**
+   * @param {boolean} on
+   * @param {string} [label]
+   */
+  function setFaceLoading(on, label) {
+    if (!faceLoading) return;
+    faceLoading.hidden = !on;
+    if (on && label) faceLoading.textContent = label;
+    else if (on) faceLoading.textContent = 'Detectando caras…';
+  }
+
+  function clearFaces() {
+    currentFaces = [];
+    if (faceLayer) {
+      faceLayer.innerHTML = '';
+      faceLayer.hidden = true;
+    }
+  }
+
+  /**
+   * Content box of object-fit:contain image inside the img element.
+   * @param {HTMLImageElement} el
+   */
+  function contentRect(el) {
+    const nw = el.naturalWidth || 0;
+    const nh = el.naturalHeight || 0;
+    const rw = el.clientWidth || 0;
+    const rh = el.clientHeight || 0;
+    if (!nw || !nh || !rw || !rh) {
+      return { left: 0, top: 0, width: rw, height: rh };
+    }
+    const scale = Math.min(rw / nw, rh / nh);
+    const width = nw * scale;
+    const height = nh * scale;
+    return {
+      left: (rw - width) / 2,
+      top: (rh - height) / 2,
+      width,
+      height,
+    };
+  }
+
+  /**
+   * @param {{ left: number, top: number, width: number, height: number }[]} faces
+   * ratios 0–1 relative to full image
+   */
+  function setFaces(faces) {
+    currentFaces = Array.isArray(faces) ? faces : [];
+    paintFaces();
+  }
+
+  function paintFaces() {
+    if (!faceLayer || !img || !stage) return;
+    faceLayer.innerHTML = '';
+    if (!facesEnabled || !currentFaces.length) {
+      faceLayer.hidden = true;
+      if (faceHint) faceHint.hidden = true;
+      return;
+    }
+
+    // Position layer over the object-fit:contain content box
+    const stageRect = stage.getBoundingClientRect();
+    const imgRect = img.getBoundingClientRect();
+    const box = contentRect(img);
+    faceLayer.hidden = false;
+    faceLayer.style.left = `${imgRect.left - stageRect.left + box.left}px`;
+    faceLayer.style.top = `${imgRect.top - stageRect.top + box.top}px`;
+    faceLayer.style.width = `${box.width}px`;
+    faceLayer.style.height = `${box.height}px`;
+
+    currentFaces.forEach((f, i) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'lb-face-hit';
+      btn.style.left = `${f.left * 100}%`;
+      btn.style.top = `${f.top * 100}%`;
+      btn.style.width = `${f.width * 100}%`;
+      btn.style.height = `${f.height * 100}%`;
+      btn.setAttribute('aria-label', 'Buscar fotos de esta cara');
+      btn.dataset.faceIndex = String(i);
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const item = items[index];
+        if (item) onFaceClick?.(f, item, index);
+      });
+      faceLayer.appendChild(btn);
+    });
+
+    if (faceHint) faceHint.hidden = false;
+  }
+
+  img?.addEventListener('load', () => {
+    // reflow after natural size known
+    requestAnimationFrame(() => paintFaces());
+  });
+
+  window.addEventListener('resize', () => {
+    if (root?.classList.contains('is-open')) paintFaces();
+  });
 
   document.querySelector('[data-lightbox-close]')?.addEventListener('click', close);
   document.querySelector('[data-lightbox-next]')?.addEventListener('click', next);
@@ -83,9 +241,20 @@
     const figs = [...gallery.querySelectorAll('figure[data-full]')];
     const list = figs.map((f) => f.getAttribute('data-full')).filter(Boolean);
     const i = figs.indexOf(fig);
-    if (i >= 0) open(list, i, { wm: 'css' });
+    if (i >= 0) open(list, i, { wm: 'css', faces: false });
   });
 
   // API global para grillas de tienda
-  window.solephLightbox = { open, close, next, prev };
+  window.solephLightbox = {
+    open,
+    close,
+    next,
+    prev,
+    current,
+    getIndex,
+    setFaces,
+    clearFaces,
+    setFaceLoading,
+    paintFaces,
+  };
 </script>

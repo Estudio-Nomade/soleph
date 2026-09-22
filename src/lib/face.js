@@ -4,6 +4,7 @@
  *
  * Index:  POST /functions/v1/face-index  { albumId, photoId, imageUrl|imageBase64 }
  * Search: POST /functions/v1/face-search { albumId, imageBase64 }
+ * Detect: POST /functions/v1/face-detect { albumId, imageUrl|imageBase64 }
  */
 
 import { getSupabase, isSupabaseConfigured, publicStorageUrl, BUCKETS } from './supabase.js';
@@ -152,6 +153,181 @@ export function photoHasIndexedFaces(photo) {
  * Busca fotos del álbum que matchean el selfie (Rekognition).
  * @param {{ albumId: string, selfie: File|Blob|string, threshold?: number, limit?: number }} args
  */
+/**
+ * Detecta caras en una foto del álbum (boxes 0–1). Público si álbum face-on.
+ * @param {{ albumId: string, image: string|Blob|File, photoId?: string }} args
+ * @returns {Promise<{ faces: { left: number, top: number, width: number, height: number, confidence?: number }[] }>}
+ */
+export async function detectPhotoFaces({ albumId, image, photoId }) {
+  if (!isSupabaseConfigured()) throw new Error('Supabase no configurado');
+
+  /** @type {Record<string, unknown>} */
+  const body = { albumId };
+  if (photoId) body.photoId = photoId;
+
+  if (typeof image === 'string' && /^https?:\/\//i.test(image)) {
+    body.imageUrl = image;
+  } else if (image instanceof Blob || image instanceof File) {
+    body.imageBase64 = await blobToDataUrl(image);
+  } else if (typeof image === 'string' && image.startsWith('data:')) {
+    body.imageBase64 = image;
+  } else if (typeof image === 'string') {
+    body.imageUrl = publicStorageUrl(BUCKETS.previews, image);
+  } else {
+    throw new Error('Imagen no soportada para detect');
+  }
+
+  const json = await invokeFunction('face-detect', body);
+  const faces = Array.isArray(json.faces)
+    ? json.faces
+        .map((f) => ({
+          left: Number(f.left),
+          top: Number(f.top),
+          width: Number(f.width),
+          height: Number(f.height),
+          confidence: f.confidence != null ? Number(f.confidence) : undefined,
+        }))
+        .filter((f) => f.width > 0 && f.height > 0)
+    : [];
+  return { faces };
+}
+
+/**
+ * Token compartible ?cara= (photoId + box). Sin DB.
+ * @param {{ photoId: string, box: { left: number, top: number, width: number, height: number } }} args
+ */
+export function encodeCaraToken({ photoId, box }) {
+  const payload = {
+    p: String(photoId || ''),
+    b: {
+      l: round4(box.left),
+      t: round4(box.top),
+      w: round4(box.width),
+      h: round4(box.height),
+    },
+  };
+  const json = JSON.stringify(payload);
+  const b64 =
+    typeof btoa === 'function'
+      ? btoa(json)
+      : typeof Buffer !== 'undefined'
+        ? Buffer.from(json, 'utf8').toString('base64')
+        : '';
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * @param {string} token
+ * @returns {{ photoId: string, box: { left: number, top: number, width: number, height: number } } | null}
+ */
+export function decodeCaraToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  try {
+    let b64 = token.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    const json =
+      typeof atob === 'function'
+        ? atob(b64)
+        : typeof Buffer !== 'undefined'
+          ? Buffer.from(b64, 'base64').toString('utf8')
+          : '';
+    const data = JSON.parse(json);
+    const photoId = String(data?.p || '');
+    const b = data?.b;
+    if (!photoId || !b) return null;
+    const box = {
+      left: Number(b.l),
+      top: Number(b.t),
+      width: Number(b.w),
+      height: Number(b.h),
+    };
+    if (!(box.width > 0 && box.height > 0)) return null;
+    return { photoId, box };
+  } catch {
+    return null;
+  }
+}
+
+function round4(n) {
+  return Math.round(Number(n) * 10000) / 10000;
+}
+
+/**
+ * Recorta una cara (ratios 0–1) de una imagen → data URL JPEG.
+ * @param {string} imageUrl
+ * @param {{ left: number, top: number, width: number, height: number }} box
+ * @param {{ pad?: number, maxSide?: number }} [opts]
+ * @returns {Promise<string>}
+ */
+export async function cropFaceFromImage(imageUrl, box, opts = {}) {
+  const pad = opts.pad != null ? Number(opts.pad) : 0.25;
+  const maxSide = opts.maxSide != null ? Number(opts.maxSide) : 640;
+
+  const img = await loadImageElement(imageUrl);
+  const nw = img.naturalWidth || img.width;
+  const nh = img.naturalHeight || img.height;
+  if (!nw || !nh) throw new Error('No se pudo medir la imagen');
+
+  let left = (Number(box.left) - pad * Number(box.width)) * nw;
+  let top = (Number(box.top) - pad * Number(box.height)) * nh;
+  let width = Number(box.width) * (1 + pad * 2) * nw;
+  let height = Number(box.height) * (1 + pad * 2) * nh;
+
+  left = Math.max(0, left);
+  top = Math.max(0, top);
+  width = Math.min(nw - left, Math.max(8, width));
+  height = Math.min(nh - top, Math.max(8, height));
+
+  let outW = Math.round(width);
+  let outH = Math.round(height);
+  const scale = Math.min(1, maxSide / Math.max(outW, outH));
+  outW = Math.max(32, Math.round(outW * scale));
+  outH = Math.max(32, Math.round(outH * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = outW;
+  canvas.height = outH;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas no disponible');
+  ctx.drawImage(img, left, top, width, height, 0, 0, outW, outH);
+  return canvas.toDataURL('image/jpeg', 0.92);
+}
+
+/**
+ * @param {string} src
+ * @returns {Promise<HTMLImageElement>}
+ */
+async function loadImageElement(src) {
+  // Prefer blob URL so canvas crop works even when Storage CORS is picky
+  let objectUrl = '';
+  try {
+    const res = await fetch(src, { mode: 'cors' });
+    if (res.ok) {
+      const blob = await res.blob();
+      objectUrl = URL.createObjectURL(blob);
+    }
+  } catch {
+    /* fall through to direct src */
+  }
+  const finalSrc = objectUrl || src;
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    if (!objectUrl) img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      if (objectUrl) {
+        // revoke after a tick — drawImage already has pixels decoded
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+      }
+      resolve(img);
+    };
+    img.onerror = () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      reject(new Error('No se pudo cargar la imagen para recortar'));
+    };
+    img.src = finalSrc;
+  });
+}
+
 export async function searchAlbumBySelfie({
   albumId,
   selfie,
@@ -173,11 +349,14 @@ export async function searchAlbumBySelfie({
     throw new Error('Selfie no soportado');
   }
 
+  // AWS SearchFacesByImage MaxFaces max is 4096; keep sane cap for UI
+  const maxFaces = Math.min(Math.max(1, Number(limit) || 60), 100);
+
   const json = await invokeFunction('face-search', {
     albumId,
     imageBase64,
     threshold,
-    maxFaces: Math.min(limit, 20),
+    maxFaces,
   });
 
   if (json.message && /no face|InvalidParameter|no faces/i.test(String(json.message))) {

@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const albumId = String(body.albumId || '');
     const threshold = Number(body.threshold ?? 85); // Rekognition similarity 0-100
-    const maxFaces = Math.min(Number(body.maxFaces ?? 5), 20);
+    const maxFaces = Math.min(Math.max(1, Number(body.maxFaces ?? 20)), 100);
 
     let bytes: Uint8Array | null = null;
     if (body.imageBase64) {
