@@ -43,3 +43,6 @@ node_modules/.cache/
 
 # Supabase CLI local link cache
 supabase/.temp/
+
+# Brainstorm mockups
+.superpowers/

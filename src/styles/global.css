@@ -1607,6 +1607,7 @@ body.lightbox-open {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: visible;
 }
 
 .lightbox img {
@@ -1644,6 +1645,163 @@ body.lightbox-open {
 
 .lightbox .next {
   right: 0.35rem;
+}
+
+.lb-face-layer {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lb-face-hit {
+  position: absolute;
+  border: 2.5px solid rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 0 0 1.5px rgba(1, 43, 85, 0.9),
+    0 6px 18px rgba(0, 0, 0, 0.35);
+  border-radius: 4px;
+  background: rgba(1, 43, 85, 0.14);
+  pointer-events: auto;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  transition:
+    background 0.12s ease,
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.lb-face-hit:hover,
+.lb-face-hit:focus-visible {
+  background: rgba(1, 43, 85, 0.32);
+  transform: scale(1.02);
+  outline: none;
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px var(--navy),
+    0 8px 22px rgba(0, 0, 0, 0.4);
+}
+
+.lb-face-hit::after {
+  content: 'Buscar esta cara';
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: var(--navy);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.28rem 0.55rem;
+  border-radius: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.lb-face-hit:hover::after,
+.lb-face-hit:focus-visible::after {
+  opacity: 1;
+}
+
+.lb-face-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(1, 20, 40, 0.42);
+  color: #fff;
+  font-weight: 650;
+  font-size: 0.95rem;
+  pointer-events: none;
+}
+
+.lb-face-loading[hidden] {
+  display: none !important;
+}
+
+.lb-face-hint {
+  position: absolute;
+  left: 50%;
+  bottom: -2.35rem;
+  transform: translateX(-50%);
+  margin: 0;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.lb-face-hint[hidden] {
+  display: none !important;
+}
+
+.face-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0 0 0.9rem;
+}
+
+.face-filter-bar[hidden] {
+  display: none !important;
+}
+
+.face-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #fff;
+  border: 1px solid var(--navy);
+  border-radius: 999px;
+  padding: 0.3rem 0.35rem 0.3rem 0.45rem;
+  box-shadow: 0 4px 14px rgba(1, 43, 85, 0.08);
+}
+
+.face-filter-chip img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid color-mix(in srgb, var(--navy) 22%, white);
+}
+
+.face-filter-chip span {
+  font-size: 0.88rem;
+  font-weight: 650;
+  color: var(--navy);
+}
+
+.face-filter-chip button {
+  border: 0;
+  background: transparent;
+  color: var(--navy-hover);
+  font-size: 0.82rem;
+  font-weight: 650;
+  cursor: pointer;
+  padding: 0.35rem 0.65rem;
+  min-height: 36px;
+}
+
+.face-filter-title {
+  margin: 0 0 0.35rem;
+  color: var(--navy);
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.face-filter-title[hidden] {
+  display: none !important;
 }
 
 .site-footer {

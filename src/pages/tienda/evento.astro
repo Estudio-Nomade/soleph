@@ -10,6 +10,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   <main class="page" data-live-album>
     <p class="form-note" data-loading>Cargando álbum…</p>
     <p class="form-note" data-error hidden style="color:#8a1f1f;"></p>
+    <p class="form-note" data-face-status hidden></p>
 
     <div data-ready hidden>
       <header class="page-header">
@@ -25,7 +26,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <section class="face-box" data-face-box hidden>
         <h2>Encontrá tus fotos por rostro</h2>
         <p>
-          Mejor desde <a href="/tienda/buscar">Buscar mis fotos</a>: elegís el evento y subís un selfie.
+          Abrí una foto y tocá una cara, o andá a
+          <a href="/tienda/buscar">Buscar mis fotos</a> con un selfie.
         </p>
         <a class="btn" href="/tienda/buscar">Ir a buscar</a>
       </section>
@@ -34,13 +36,29 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         <div class="cat-chips" data-cat-chips hidden role="tablist" aria-label="Categorías"></div>
         <a class="btn btn-ghost" href="/tienda/carrito">Ir al carrito</a>
       </div>
-      <p class="face-hint" style="margin:0 0 0.75rem">
-        Tocá la foto para agrandarla. Marcá el cuadrado para elegir una o varias y después
-        <strong>Agregar al carrito</strong>.
+
+      <div class="face-filter-bar" data-face-filter-bar hidden>
+        <div class="face-filter-chip">
+          <img data-face-filter-thumb src="" alt="" width="28" height="28" />
+          <span data-face-filter-label>Fotos de esta persona</span>
+          <button type="button" data-face-filter-clear>Ver todas</button>
+        </div>
+      </div>
+      <h2 class="face-filter-title" data-face-filter-title hidden>Tus fotos</h2>
+
+      <p class="face-hint" style="margin:0 0 0.75rem" data-album-hint>
+        Tocá la foto para agrandarla. Si hay caras, tocá un recuadro para ver solo las de esa persona.
+        Marcá el cuadrado para elegir y después <strong>Agregar al carrito</strong>.
       </p>
 
       <div data-album-sections></div>
       <p class="face-hint" data-empty hidden>Este evento todavía no tiene fotos publicadas.</p>
+      <p class="face-hint" data-face-empty hidden>
+        No encontramos más fotos de esta persona. Probá otra cara o
+        <button type="button" class="btn btn-ghost" data-face-filter-clear-inline style="margin-left:0.35rem">
+          ver todas
+        </button>
+      </p>
     </div>
   </main>
 </BaseLayout>
@@ -58,11 +76,20 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     bindPhotoTile,
     ensureSelectBar,
     paintAllTiles,
+    setLightboxOpenOpts,
   } from '../../scripts/shop-select.js';
+  import {
+    detectPhotoFaces,
+    searchAlbumBySelfie,
+    cropFaceFromImage,
+    encodeCaraToken,
+    decodeCaraToken,
+  } from '../../lib/face.js';
 
   const root = document.querySelector('[data-live-album]');
   const loadingEl = root?.querySelector('[data-loading]');
   const errorEl = root?.querySelector('[data-error]');
+  const faceStatusEl = root?.querySelector('[data-face-status]');
   const readyEl = root?.querySelector('[data-ready]');
   const nameEl = root?.querySelector('[data-name]');
   const subEl = root?.querySelector('[data-sub]');
@@ -72,13 +99,27 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   const sectionsEl = root?.querySelector('[data-album-sections]');
   const chipsEl = root?.querySelector('[data-cat-chips]');
   const emptyEl = root?.querySelector('[data-empty]');
+  const faceEmptyEl = root?.querySelector('[data-face-empty]');
+  const faceFilterBar = root?.querySelector('[data-face-filter-bar]');
+  const faceFilterLabel = root?.querySelector('[data-face-filter-label]');
+  const faceFilterThumb = /** @type {HTMLImageElement | null} */ (
+    root?.querySelector('[data-face-filter-thumb]')
+  );
+  const faceFilterTitle = root?.querySelector('[data-face-filter-title]');
 
-  const albumId = new URLSearchParams(window.location.search).get('id');
+  const params = new URLSearchParams(window.location.search);
+  const albumId = params.get('id');
 
   /** @type {any} */
   let album = null;
   /** @type {string} '' = todas */
   let activeCat = '';
+  /** @type {string[] | null} */
+  let faceFilterIds = null;
+  /** @type {string | null} */
+  let faceFilterThumbSrc = null;
+  /** @type {string | null} */
+  let detectReqId = null;
 
   ensureSelectBar();
 
@@ -88,12 +129,26 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     errorEl.textContent = msg || '';
   }
 
+  function setFaceStatus(msg) {
+    if (!faceStatusEl) return;
+    faceStatusEl.hidden = !msg;
+    faceStatusEl.textContent = msg || '';
+  }
+
   function escapeHtml(s) {
     return String(s)
       .replaceAll('&', '&amp;')
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;');
+  }
+
+  function faceSearchOn() {
+    return album && album.search_by_face !== false;
+  }
+
+  function lb() {
+    return window.solephLightbox;
   }
 
   function makeTile(photo, unit) {
@@ -109,11 +164,6 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     el.dataset.albumName = album.name;
     el.dataset.unit = String(unit);
     if (photo.categoryId) el.dataset.cat = photo.categoryId;
-    // Hasta re-bake: CSS pone UN logo visible en la grilla (el JPEG viejo
-    // trae patrón chico casi invisible en crop square).
-    // Lightbox: wm=css también (tapa un poco el patrón viejo con un logo grande).
-    // Después de "Actualizar marcas de agua" el JPEG ya tiene 1 logo; conviene
-    // dejar wm=off y sacar el span — por ahora priorizamos que se vea YA.
     el.dataset.wm = 'css';
     el.innerHTML = `
       <button type="button" class="photo-tile-open" data-open-photo aria-label="Ver #${escapeHtml(code)} en grande">
@@ -148,8 +198,20 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     return groups.filter((g) => g.photos.length > 0);
   }
 
+  function photosForGrid() {
+    const all = Array.isArray(album?.photos) ? album.photos : [];
+    if (!faceFilterIds) return all;
+    const byId = new Map(all.map((p) => [p.id, p]));
+    return faceFilterIds.map((id) => byId.get(id)).filter(Boolean);
+  }
+
   function renderChips(groups) {
     if (!chipsEl) return;
+    if (faceFilterIds) {
+      chipsEl.hidden = true;
+      chipsEl.innerHTML = '';
+      return;
+    }
     const multi = groups.length > 1;
     chipsEl.hidden = !multi;
     if (!multi) {
@@ -181,11 +243,34 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     });
   }
 
+  function paintFaceFilterChrome() {
+    const on = !!faceFilterIds;
+    if (faceFilterBar) faceFilterBar.hidden = !on;
+    if (faceFilterTitle) faceFilterTitle.hidden = !on;
+    if (faceFilterLabel && faceFilterIds) {
+      const n = faceFilterIds.length;
+      faceFilterLabel.textContent = n === 1 ? '1 foto de esta persona' : `${n} fotos de esta persona`;
+    }
+    if (faceFilterThumb) {
+      if (faceFilterThumbSrc) {
+        faceFilterThumb.src = faceFilterThumbSrc;
+        faceFilterThumb.hidden = false;
+      } else {
+        faceFilterThumb.removeAttribute('src');
+        faceFilterThumb.hidden = true;
+      }
+    }
+    if (faceEmptyEl) {
+      faceEmptyEl.hidden = !(on && faceFilterIds && faceFilterIds.length === 0);
+    }
+  }
+
   function renderSections() {
     if (!sectionsEl || !album) return;
     const unit = Number(album.photo_price_ars) || 0;
     const groups = groupPhotos();
     renderChips(groups);
+    paintFaceFilterChrome();
 
     sectionsEl.innerHTML = '';
     if (!album.photos.length) {
@@ -193,6 +278,21 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       return;
     }
     emptyEl && (emptyEl.hidden = true);
+
+    // Face filter: only matches, order by search ranking
+    if (faceFilterIds) {
+      const list = photosForGrid();
+      const section = document.createElement('section');
+      section.className = 'album-cat-section';
+      section.dataset.catSection = 'face';
+      const grid = document.createElement('div');
+      grid.className = 'photo-grid';
+      for (const photo of list) grid.appendChild(makeTile(photo, unit));
+      section.appendChild(grid);
+      sectionsEl.appendChild(section);
+      paintAllTiles(sectionsEl);
+      return;
+    }
 
     if (activeCat === '') {
       const section = document.createElement('section');
@@ -224,6 +324,149 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     }
     paintAllTiles(sectionsEl);
   }
+
+  function setCaraInUrl(token) {
+    const url = new URL(window.location.href);
+    if (token) url.searchParams.set('cara', token);
+    else url.searchParams.delete('cara');
+    window.history.replaceState({}, '', url);
+  }
+
+  function clearFaceFilter() {
+    faceFilterIds = null;
+    faceFilterThumbSrc = null;
+    setCaraInUrl(null);
+    setFaceStatus('');
+    renderSections();
+  }
+
+  /**
+   * @param {{ photoIds: string[], thumbSrc?: string, token?: string }} args
+   */
+  function applyFaceFilter({ photoIds, thumbSrc, token }) {
+    faceFilterIds = Array.isArray(photoIds) ? photoIds : [];
+    faceFilterThumbSrc = thumbSrc || null;
+    if (token) setCaraInUrl(token);
+    setFaceStatus('');
+    renderSections();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  /**
+   * @param {{ left: number, top: number, width: number, height: number }} box
+   * @param {{ src: string, photoId?: string }} item
+   */
+  async function runFaceSearchFromBox(box, item) {
+    if (!album || !faceSearchOn() || !item?.src || !item?.photoId) return;
+    const api = lb();
+    api?.setFaceLoading?.(true, 'Buscando fotos…');
+    setFaceStatus('Buscando fotos de esta persona…');
+    try {
+      const crop = await cropFaceFromImage(item.src, box, { pad: 0.28, maxSide: 640 });
+      const token = encodeCaraToken({ photoId: item.photoId, box });
+      const result = await searchAlbumBySelfie({
+        albumId: album.id,
+        selfie: crop,
+        limit: 100,
+      });
+      api?.close?.();
+      if (result.noFace) {
+        setFaceStatus('No se reconoció bien esa cara. Probá otra.');
+        return;
+      }
+      applyFaceFilter({
+        photoIds: result.photoIds || [],
+        thumbSrc: crop,
+        token,
+      });
+      if (!(result.photoIds || []).length) {
+        setFaceStatus('No encontramos más fotos de esta persona.');
+      }
+    } catch (err) {
+      console.warn('face click search', err);
+      setFaceStatus(err?.message || 'No se pudo buscar esa cara.');
+    } finally {
+      api?.setFaceLoading?.(false);
+    }
+  }
+
+  async function detectForCurrentItem(item) {
+    if (!album || !faceSearchOn() || !item?.src) return;
+    const api = lb();
+    const req = `${item.photoId || item.src}:${Date.now()}`;
+    detectReqId = req;
+    api?.clearFaces?.();
+    api?.setFaceLoading?.(true, 'Detectando caras…');
+    try {
+      const { faces } = await detectPhotoFaces({
+        albumId: album.id,
+        image: item.src,
+        photoId: item.photoId,
+      });
+      if (detectReqId !== req) return;
+      const cur = api?.current?.();
+      if (cur && item.photoId && cur.photoId && cur.photoId !== item.photoId) return;
+      api?.setFaces?.(faces || []);
+    } catch (err) {
+      console.warn('face detect', err);
+      if (detectReqId === req) api?.clearFaces?.();
+    } finally {
+      if (detectReqId === req) api?.setFaceLoading?.(false);
+    }
+  }
+
+  function wireLightboxFaces() {
+    setLightboxOpenOpts(() => {
+      if (!faceSearchOn()) return { faces: false };
+      return {
+        faces: true,
+        onChange: (item) => {
+          detectForCurrentItem(item);
+        },
+        onFaceClick: (face, item) => {
+          runFaceSearchFromBox(face, item);
+        },
+      };
+    });
+  }
+
+  async function hydrateCaraFromUrl() {
+    if (!album || !faceSearchOn()) return;
+    const token = new URLSearchParams(window.location.search).get('cara');
+    if (!token) return;
+    const decoded = decodeCaraToken(token);
+    if (!decoded) return;
+    const photo = (album.photos || []).find((p) => p.id === decoded.photoId);
+    if (!photo?.src) {
+      setFaceStatus('Ese link de cara ya no vale. Abrí una foto y tocá de nuevo.');
+      setCaraInUrl(null);
+      return;
+    }
+    setFaceStatus('Cargando fotos de esta persona…');
+    try {
+      const crop = await cropFaceFromImage(photo.src, decoded.box, { pad: 0.28, maxSide: 640 });
+      const result = await searchAlbumBySelfie({
+        albumId: album.id,
+        selfie: crop,
+        limit: 100,
+      });
+      applyFaceFilter({
+        photoIds: result.photoIds || [],
+        thumbSrc: crop,
+        token,
+      });
+      if (!(result.photoIds || []).length) {
+        setFaceStatus('No encontramos fotos para este link.');
+      }
+    } catch (err) {
+      console.warn('cara hydrate', err);
+      setFaceStatus(err?.message || 'No se pudo aplicar el filtro de cara.');
+      setCaraInUrl(null);
+    }
+  }
+
+  root?.querySelector('[data-face-filter-clear]')?.addEventListener('click', clearFaceFilter);
+  root?.querySelector('[data-face-filter-clear-inline]')?.addEventListener('click', clearFaceFilter);
 
   async function load() {
     if (!albumId) {
@@ -275,7 +518,6 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       const unit = Number(album.photo_price_ars) || 0;
       const tiers = Array.isArray(album.price_tiers) ? album.price_tiers : [];
       window.__SOLEPH_PRICE__ = { unitPrice: unit, tiers, albumId: album.id };
-      // refresh unit on items already in cart from this album
       patchCartAlbumPricing(album.id, { unitPrice: unit, albumName: album.name });
 
       if (tiersEl) {
@@ -291,7 +533,6 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
       if (faceBox) faceBox.hidden = album.search_by_face === false;
 
-      // deep-link ?cat=slug
       const catParam = new URLSearchParams(window.location.search).get('cat');
       if (catParam && album.categories?.length) {
         const hit = album.categories.find(
@@ -300,9 +541,12 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         if (hit) activeCat = hit.id;
       }
 
+      wireLightboxFaces();
       renderSections();
       readyEl && (readyEl.hidden = false);
       window.addEventListener('soleph:cart', () => paintAllTiles(sectionsEl || document));
+
+      await hydrateCaraFromUrl();
     } catch (err) {
       loadingEl && (loadingEl.hidden = true);
       showError(err?.message || 'No se pudo cargar el evento');

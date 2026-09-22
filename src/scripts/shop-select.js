@@ -82,24 +82,39 @@ export function toggleSelect(tile, force) {
   paintBar();
 }
 
-function gallerySources(scope) {
+function galleryItems(scope) {
   return [...scope.querySelectorAll('[data-photo]')]
-    .map((t) => t.getAttribute('data-src'))
+    .map((t) => {
+      const src = t.getAttribute('data-src');
+      if (!src) return null;
+      return {
+        src,
+        photoId: t.getAttribute('data-id') || undefined,
+        code: t.getAttribute('data-code') || undefined,
+      };
+    })
     .filter(Boolean);
 }
 
-function openLightboxFromTile(tile, scope) {
+/**
+ * @param {Element} tile
+ * @param {ParentNode} scope
+ * @param {Record<string, unknown>} [extraOpts] merged into lightbox open opts
+ */
+function openLightboxFromTile(tile, scope, extraOpts = {}) {
   const src = tile.getAttribute('data-src');
   if (!src) return;
-  const list = gallerySources(scope);
-  const start = Math.max(0, list.indexOf(src));
+  const list = galleryItems(scope);
+  const id = tile.getAttribute('data-id');
+  let start = list.findIndex((it) => it.photoId && id && it.photoId === id);
+  if (start < 0) start = list.findIndex((it) => it.src === src);
   // data-wm="off" = preview ya trae logo horneado (evento live)
   // default / "css" = un logo CSS encima (series estáticas)
   const wmAttr = tile.getAttribute('data-wm') || scope?.getAttribute?.('data-wm') || 'css';
   const wm = wmAttr === 'off' ? 'off' : 'css';
   const api = window.solephLightbox;
   if (api && typeof api.open === 'function') {
-    api.open(list, start >= 0 ? start : 0, { wm });
+    api.open(list, start >= 0 ? start : 0, { wm, ...extraOpts });
   } else {
     // fallback: full image in new tab
     window.open(src, '_blank', 'noopener');
@@ -111,6 +126,19 @@ function openLightboxFromTile(tile, scope) {
  * @param {Element} tile
  * @param {ParentNode} [scope]
  */
+/**
+ * Optional per-page lightbox extras (faces, callbacks). Set from evento.astro.
+ * @type {() => Record<string, unknown>}
+ */
+let lightboxOptsProvider = () => ({});
+
+/**
+ * @param {() => Record<string, unknown>} fn
+ */
+export function setLightboxOpenOpts(fn) {
+  lightboxOptsProvider = typeof fn === 'function' ? fn : () => ({});
+}
+
 export function bindPhotoTile(tile, scope = document) {
   if (!(tile instanceof HTMLElement) || tile.dataset.shopBound === '1') return;
   tile.dataset.shopBound = '1';
@@ -122,10 +150,12 @@ export function bindPhotoTile(tile, scope = document) {
   const openBtn = tile.querySelector('[data-open-photo]');
   const check = tile.querySelector('[data-select]');
 
+  const open = () => openLightboxFromTile(tile, scope, lightboxOptsProvider());
+
   openBtn?.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    openLightboxFromTile(tile, scope);
+    open();
   });
 
   // click en el tile (fuera del check) también amplía
@@ -133,7 +163,7 @@ export function bindPhotoTile(tile, scope = document) {
     const t = /** @type {HTMLElement} */ (e.target);
     if (t.closest('[data-select], .photo-check, label.photo-check')) return;
     if (t.closest('[data-open-photo]')) return; // already handled
-    openLightboxFromTile(tile, scope);
+    open();
   });
 
   check?.addEventListener('click', (e) => e.stopPropagation());
