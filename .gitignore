@@ -46,3 +46,6 @@ supabase/.temp/
 
 # Brainstorm mockups
 .superpowers/
+
+# Git worktrees locales
+.worktrees/
