@@ -5,6 +5,7 @@
 
 import { getSupabase, isSupabaseConfigured, publicStorageUrl, BUCKETS } from './supabase.js';
 import { formatStorageError, uploadWithRetry } from './storage-upload.js';
+import { makeWatermarkedPreview, safeFileBase } from './watermark.js';
 
 export const PORTFOLIO_SETTINGS_KEY = 'portfolio';
 
@@ -143,20 +144,36 @@ export async function loadPortfolioContent(fallback) {
 }
 
 /**
- * Sube imagen de portafolio al bucket público de covers.
+ * Sube imagen de portafolio (Trabajos) con marca de agua bakeada.
+ * Misma lógica que la vitrina de tienda: JPEG liviano + logo; no se guarda el original.
  * @param {File} file
  * @param {string} folder e.g. about | paisajes
+ * @param {{ watermark?: boolean }} [opts] — about puede ir sin marca; proyectos siempre con.
  */
-export async function uploadPortfolioImage(file, folder = 'misc') {
+export async function uploadPortfolioImage(file, folder = 'misc', opts = {}) {
   if (!isSupabaseConfigured()) throw new Error('Supabase no configurado');
   const sb = getSupabase();
-  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
   const safeFolder = String(folder || 'misc')
     .replace(/[^a-z0-9_-]+/gi, '-')
     .slice(0, 40);
-  const path = `portfolio/${safeFolder}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const { error } = await uploadWithRetry(sb, BUCKETS.covers, path, file, {
-    contentType: file.type || 'image/jpeg',
+  const wantWm = opts.watermark !== false && safeFolder !== 'about';
+
+  let blob = file;
+  let contentType = file.type || 'image/jpeg';
+  let ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+
+  if (wantWm) {
+    // Portafolio: un poco más nítido que la vitrina de tienda (1024), sigue protegido.
+    const { previewBlob } = await makeWatermarkedPreview(file, { maxEdge: 1600, quality: 0.78 });
+    blob = previewBlob;
+    contentType = 'image/jpeg';
+    ext = 'jpg';
+  }
+
+  const base = safeFileBase(file.name);
+  const path = `portfolio/${safeFolder}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}-${base}.${ext}`;
+  const { error } = await uploadWithRetry(sb, BUCKETS.covers, path, blob, {
+    contentType,
     upsert: false,
     attempts: 4,
   });
