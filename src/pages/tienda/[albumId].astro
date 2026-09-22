@@ -28,7 +28,12 @@ const initialMessage =
   'Alta resolución. Cuando confirmamos la transferencia por WhatsApp, te la mando por ahí.';
 ---
 
-<BaseLayout title={album.name} description={`Comprá fotos de ${album.name}`} ogImage={album.cover}>
+<BaseLayout
+  title={album.name}
+  description={`Comprá fotos de ${album.name}`}
+  ogImage={album.cover}
+  robots="noindex, nofollow, noai, noimageai"
+>
   <main class="page">
     <header class="page-header">
       <h1>{album.name}</h1>
@@ -97,7 +102,7 @@ const initialMessage =
               data-unit={unit}
             >
               <button type="button" class="photo-tile-open" data-open-photo aria-label={`Ver #${code} en grande`}>
-                <img src={photo.thumb} alt={`#${code}`} loading="lazy" width="600" height="600" />
+                <img src={photo.thumb} alt={`#${code}`} loading="lazy" width="600" height="600" draggable="false" />
                 <span class="wm-overlay" aria-hidden="true" />
               </button>
               <span class="photo-code-badge">#{code}</span>

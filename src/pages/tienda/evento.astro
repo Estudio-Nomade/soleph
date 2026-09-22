@@ -2,7 +2,11 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 ---
 
-<BaseLayout title="Evento" description="Fotos del evento">
+<BaseLayout
+  title="Evento"
+  description="Fotos del evento"
+  robots="noindex, nofollow, noai, noimageai"
+>
   <main class="page" data-live-album>
     <p class="form-note" data-loading>Cargando álbum…</p>
     <p class="form-note" data-error hidden style="color:#8a1f1f;"></p>
@@ -113,7 +117,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     el.dataset.wm = 'css';
     el.innerHTML = `
       <button type="button" class="photo-tile-open" data-open-photo aria-label="Ver #${escapeHtml(code)} en grande">
-        <img src="${escapeHtml(photo.thumb || photo.src)}" alt="#${escapeHtml(code)}" loading="lazy" width="600" height="600" />
+        <img src="${escapeHtml(photo.thumb || photo.src)}" alt="#${escapeHtml(code)}" loading="lazy" width="600" height="600" draggable="false" />
         <span class="wm-overlay" aria-hidden="true"></span>
       </button>
       <span class="photo-code-badge" title="Código de la foto">#${escapeHtml(code)}</span>

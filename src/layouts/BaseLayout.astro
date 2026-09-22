@@ -11,12 +11,15 @@ interface Props {
   title?: string;
   description?: string;
   ogImage?: string;
+  /** Meta robots. Default: SEO on + señales noai. Tienda live: noindex. */
+  robots?: string;
 }
 
 const {
   title = site.brand.name,
   description = `${site.brand.name} — ${site.brand.tagline}. ${site.brand.location}.`,
   ogImage = site.projects[0]?.cover || '/images/logo.png',
+  robots = 'index, follow, noai, noimageai',
 } = Astro.props;
 
 const fullTitle = title === site.brand.name ? title : `${site.brand.name} - ${title}`;
@@ -31,6 +34,7 @@ const fullTitle = title === site.brand.name ? title : `${site.brand.name} - ${ti
     <meta name="generator" content={Astro.generator} />
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
+    <meta name="robots" content={robots} />
     <meta property="og:title" content={fullTitle} />
     <meta property="og:description" content={description} />
     <meta property="og:image" content={ogImage} />
@@ -50,5 +54,8 @@ const fullTitle = title === site.brand.name ? title : `${site.brand.name} - ${ti
     <CartDrawer />
     <Lightbox />
     <ShopSelectBar />
+    <script>
+      import '../scripts/image-guard.js';
+    </script>
   </body>
 </html>

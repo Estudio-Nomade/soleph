@@ -8,7 +8,11 @@ const options = eventAlbums.length ? eventAlbums : allSellable;
 const onlyEvents = eventAlbums.length > 0;
 ---
 
-<BaseLayout title="Buscar mis fotos" description="Elegí el evento y encontrá tus fotos con un selfie.">
+<BaseLayout
+  title="Buscar mis fotos"
+  description="Elegí el evento y encontrá tus fotos con un selfie."
+  robots="noindex, nofollow, noai, noimageai"
+>
   <main class="page">
     <header class="page-header">
       <h1>Buscar mis fotos</h1>
@@ -203,7 +207,7 @@ const onlyEvents = eventAlbums.length > 0;
       el.dataset.unit = String(unit);
       el.innerHTML = `
         <button type="button" class="photo-tile-open" data-open-photo aria-label="Ver #${escapeHtml(code)} en grande">
-          <img src="${escapeHtml(src)}" alt="#${escapeHtml(code)}" loading="lazy" width="600" height="600" />
+          <img src="${escapeHtml(src)}" alt="#${escapeHtml(code)}" loading="lazy" width="600" height="600" draggable="false" />
         </button>
         <span class="photo-code-badge" title="Código de la foto">#${escapeHtml(code)}</span>
         <label class="photo-check" title="Elegir foto">
