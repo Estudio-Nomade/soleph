@@ -47,9 +47,33 @@ const onlyEvents = eventAlbums.length > 0;
         </p>
       </section>
 
-      <section class="face-box">
+      <section class="face-box face-box--selfie">
         <h2>2. Tu selfie</h2>
         <p class="face-hint">De frente, buena luz, sin anteojos oscuros si se puede.</p>
+
+        <div class="selfie-stage" data-selfie-stage>
+          <button type="button" class="selfie-avatar selfie-avatar--empty" data-selfie-empty aria-label="Elegir selfie">
+            <span class="selfie-avatar-ring" aria-hidden="true">
+              <svg class="selfie-avatar-icon" viewBox="0 0 64 64" width="64" height="64" fill="none" aria-hidden="true">
+                <circle cx="32" cy="22" r="11" stroke="currentColor" stroke-width="2.2" />
+                <path
+                  d="M12 52.5c2.8-10.2 10.2-15.5 20-15.5s17.2 5.3 20 15.5"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                />
+              </svg>
+              <span class="selfie-avatar-plus" aria-hidden="true">+</span>
+            </span>
+            <span class="selfie-avatar-label">Tu selfie va acá</span>
+            <span class="selfie-avatar-sub">Tocá para elegir una foto</span>
+          </button>
+
+          <div class="selfie-preview-wrap" data-selfie-wrap hidden>
+            <img class="selfie-preview-lg" data-selfie-preview alt="Tu selfie" draggable="false" />
+            <button type="button" class="btn btn-ghost" data-selfie-clear>Cambiar foto</button>
+          </div>
+        </div>
 
         <div class="selfie-actions">
           <label class="btn">
@@ -60,11 +84,6 @@ const onlyEvents = eventAlbums.length > 0;
             Sacar selfie
             <input type="file" accept="image/*" capture="user" data-selfie-camera class="sr-only" />
           </label>
-        </div>
-
-        <div class="selfie-preview-wrap" data-selfie-wrap hidden>
-          <img class="selfie-preview-lg" data-selfie-preview alt="Tu selfie" />
-          <button type="button" class="btn btn-ghost" data-selfie-clear>Cambiar foto</button>
         </div>
       </section>
 
@@ -103,6 +122,7 @@ const onlyEvents = eventAlbums.length > 0;
   const camInput = document.querySelector('[data-selfie-camera]');
   const preview = document.querySelector('[data-selfie-preview]');
   const wrap = document.querySelector('[data-selfie-wrap]');
+  const emptyAvatar = document.querySelector('[data-selfie-empty]');
   const clearBtn = document.querySelector('[data-selfie-clear]');
   const submit = document.querySelector('[data-submit]');
   const statusEl = document.querySelector('[data-status]');
@@ -142,6 +162,12 @@ const onlyEvents = eventAlbums.length > 0;
     if (submit) submit.disabled = !(hasEvent() && hasSelfie());
   }
 
+  function showEmptyAvatar(on) {
+    if (!emptyAvatar) return;
+    emptyAvatar.hidden = !on;
+    emptyAvatar.setAttribute('aria-hidden', on ? 'false' : 'true');
+  }
+
   function setSelfie(file) {
     if (!file || !preview || !wrap) return;
     selfieFile = file;
@@ -149,6 +175,7 @@ const onlyEvents = eventAlbums.length > 0;
     objectUrl = URL.createObjectURL(file);
     preview.src = objectUrl;
     wrap.hidden = false;
+    showEmptyAvatar(false);
     showError('');
     sync();
   }
@@ -159,6 +186,7 @@ const onlyEvents = eventAlbums.length > 0;
     objectUrl = '';
     if (preview) preview.removeAttribute('src');
     if (wrap) wrap.hidden = true;
+    showEmptyAvatar(true);
     if (fileInput) fileInput.value = '';
     if (camInput) camInput.value = '';
     sync();
@@ -249,6 +277,7 @@ const onlyEvents = eventAlbums.length > 0;
   fileInput?.addEventListener('change', () => setSelfie(fileInput.files?.[0]));
   camInput?.addEventListener('change', () => setSelfie(camInput.files?.[0]));
   clearBtn?.addEventListener('click', clearSelfie);
+  emptyAvatar?.addEventListener('click', () => fileInput?.click());
 
   form?.addEventListener('submit', async (e) => {
     e.preventDefault();
