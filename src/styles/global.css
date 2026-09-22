@@ -921,6 +921,19 @@ select {
   object-fit: cover;
   display: block;
   pointer-events: none;
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Vitrina: menos “guardar arrastrando” (fricción, no DRM) */
+.photo-tile-open img,
+[data-lightbox-img],
+.lightbox img,
+.wm-overlay {
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* Marca de agua CSS: UN solo logo centrado (series estáticas / lightbox sin bake).
@@ -1469,6 +1482,9 @@ body.lightbox-open {
 }
 
 .lightbox img {
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
   max-width: min(1100px, 94vw);
   max-height: 82vh;
   object-fit: contain;

@@ -115,6 +115,10 @@ export function bindPhotoTile(tile, scope = document) {
   if (!(tile instanceof HTMLElement) || tile.dataset.shopBound === '1') return;
   tile.dataset.shopBound = '1';
 
+  tile.querySelectorAll('img').forEach((img) => {
+    if (img.getAttribute('draggable') !== 'false') img.setAttribute('draggable', 'false');
+  });
+
   const openBtn = tile.querySelector('[data-open-photo]');
   const check = tile.querySelector('[data-select]');
 
@@ -174,7 +178,7 @@ export function photoTileInnerHtml({ thumb, code, alt }) {
   const label = code ? `#${code}` : alt || 'Foto';
   return `
     <button type="button" class="photo-tile-open" data-open-photo aria-label="Ver ${label} en grande">
-      <img src="${thumb}" alt="${label}" loading="lazy" width="600" height="600" />
+      <img src="${thumb}" alt="${label}" loading="lazy" width="600" height="600" draggable="false" />
       <span class="wm-overlay" aria-hidden="true"></span>
     </button>
     <span class="photo-code-badge" title="Código de la foto">${code ? `#${code}` : ''}</span>
