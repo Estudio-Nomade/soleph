@@ -1,8 +1,9 @@
 /**
- * Uploads a Storage con reintentos para fallos de red / edge (520, 502, 503, 504).
- * El mensaje "HTTP 520 error" de Supabase NO es de la foto: es Cloudflare/proxy
- * entre el browser y el storage de Supabase (transitorio o timeout con archivos grandes).
+ * Uploads via presigned PUT con reintentos para fallos de red / edge (520, 502, 503, 504).
+ * El mensaje "HTTP 520 error" NO es de la foto: es proxy/CDN transitorio o timeout con archivos grandes.
  */
+
+import { deleteStorageObjects, presignStorage } from './storage-api.js';
 
 const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524]);
 
@@ -54,7 +55,7 @@ export function formatStorageError(err, ctx = {}) {
   if (status === 413 || /payload too large|entity too large|maximum allowed size|file size/i.test(raw)) {
     return `${name}el archivo pesa de más (límite ~50 MB en originales, ~10 MB en preview). Bajá tamaño o calidad y reintentá.`;
   }
-  if (status === 401 || status === 403 || /jwt|not authorized|row-level security|unauthorized/i.test(raw)) {
+  if (status === 401 || status === 403 || /jwt|not authorized|row-level security|unauthorized|sesión admin/i.test(raw)) {
     return `${name}sesión admin vencida o sin permiso de storage. Cerrá sesión, entrá de nuevo y reintentá.`;
   }
   if (status === 409 || /already exists|duplicate|resource already/i.test(raw)) {
@@ -77,49 +78,65 @@ function sleep(ms) {
 }
 
 /**
- * @param {import('@supabase/supabase-js').SupabaseClient} sb
- * @param {string} bucket
+ * @param {string} kind BUCKETS.previews | originals | covers
  * @param {string} path
- * @param {File|Blob|ArrayBuffer|ArrayBufferView|string} body
+ * @param {Blob|File|ArrayBuffer|ArrayBufferView} body
  * @param {{
  *   contentType?: string,
- *   upsert?: boolean,
- *   cacheControl?: string,
  *   attempts?: number,
  *   baseDelayMs?: number,
- *   label?: string,
  *   onRetry?: (info: { attempt: number, attempts: number, error: unknown, delayMs: number }) => void,
  * }} [opts]
+ * @returns {Promise<{ data: { path: string } | null, error: unknown }>}
  */
-export async function uploadWithRetry(sb, bucket, path, body, opts = {}) {
+export async function uploadWithRetry(kind, path, body, opts = {}) {
   const attempts = Math.max(1, opts.attempts ?? 4);
   const baseDelayMs = opts.baseDelayMs ?? 900;
-  const fileOptions = {
-    contentType: opts.contentType,
-    upsert: opts.upsert ?? false,
-    cacheControl: opts.cacheControl,
-  };
+  const contentType = opts.contentType || 'application/octet-stream';
 
   /** @type {unknown} */
   let lastError = null;
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const res = await sb.storage.from(bucket).upload(path, body, fileOptions);
-    if (!res.error) {
-      return res;
-    }
-    lastError = res.error;
-    const retry = attempt < attempts && isRetryableStorageError(res.error);
-    if (!retry) {
-      return res;
-    }
-    // jitter + backoff exponencial (1×, 2×, 4× …)
-    const delayMs = Math.round(baseDelayMs * 2 ** (attempt - 1) * (0.75 + Math.random() * 0.5));
-    if (typeof opts.onRetry === 'function') {
-      opts.onRetry({ attempt, attempts, error: res.error, delayMs });
-    }
-    await sleep(delayMs);
-  }
+    try {
+      const signed = await presignStorage({ kind, path, contentType, op: 'put' });
+      const headers = new Headers(signed.headers || {});
+      if (contentType && !headers.has('Content-Type')) headers.set('Content-Type', contentType);
 
+      const putRes = await fetch(signed.url, {
+        method: signed.method || 'PUT',
+        headers,
+        body,
+      });
+
+      if (!putRes.ok) {
+        const text = await putRes.text().catch(() => '');
+        const err = new Error(text || `HTTP ${putRes.status}`);
+        // @ts-ignore
+        err.status = putRes.status;
+        throw err;
+      }
+      return { data: { path }, error: null };
+    } catch (err) {
+      lastError = err;
+      const retry = attempt < attempts && isRetryableStorageError(err);
+      if (!retry) return { data: null, error: lastError };
+      const delayMs = Math.round(baseDelayMs * 2 ** (attempt - 1) * (0.75 + Math.random() * 0.5));
+      if (typeof opts.onRetry === 'function') {
+        opts.onRetry({ attempt, attempts, error: err, delayMs });
+      }
+      await sleep(delayMs);
+    }
+  }
   return { data: null, error: lastError };
+}
+
+/**
+ * @param {string} kind
+ * @param {string[]} paths
+ */
+export async function removeStoragePaths(kind, paths) {
+  const items = (paths || []).filter(Boolean).map((path) => ({ kind, path }));
+  if (!items.length) return { ok: true, deleted: 0 };
+  return deleteStorageObjects(items);
 }

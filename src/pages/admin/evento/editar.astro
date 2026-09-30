@@ -193,7 +193,8 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
   } from '../../../lib/supabase-page.js';
   import { makeWatermarkedPreview, safeFileBase } from '../../../lib/watermark.js';
   import { indexPhotoFacesWithRetry, photoHasIndexedFaces } from '../../../lib/face.js';
-  import { formatStorageError, uploadWithRetry } from '../../../lib/storage-upload.js';
+  import { formatStorageError, uploadWithRetry, removeStoragePaths } from '../../../lib/storage-upload.js';
+  import { deleteStorageObjects, presignStorage } from '../../../lib/storage-api.js';
   import {
     cameraCodeFromFilename,
     slugifyCategory,
@@ -930,10 +931,11 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
    */
   async function deletePhotoRow(photo, sb) {
     try {
-      const pathsPreview = photo.preview_path ? [photo.preview_path] : [];
-      const pathsOriginal = photo.original_path ? [photo.original_path] : [];
-      if (pathsPreview.length) await sb.storage.from(BUCKETS.previews).remove(pathsPreview);
-      if (pathsOriginal.length) await sb.storage.from(BUCKETS.originals).remove(pathsOriginal);
+      /** @type {{ kind: string, path: string }[]} */
+      const storageItems = [];
+      if (photo.preview_path) storageItems.push({ kind: BUCKETS.previews, path: photo.preview_path });
+      if (photo.original_path) storageItems.push({ kind: BUCKETS.originals, path: photo.original_path });
+      if (storageItems.length) await deleteStorageObjects(storageItems);
       try {
         await sb.from('face_embeddings').delete().eq('photo_id', photo.id);
       } catch (_) {
@@ -1146,7 +1148,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         const base = `${albumId}/${camCode}-${Date.now().toString(36)}-${safeFileBase(file.name)}`;
         const previewPath = `${base}-wm.jpg`;
 
-        const upPrev = await uploadWithRetry(sb, BUCKETS.previews, previewPath, previewBlob, {
+        const upPrev = await uploadWithRetry(BUCKETS.previews, previewPath, previewBlob, {
           contentType: 'image/jpeg',
           upsert: false,
           attempts: 4,
@@ -1168,7 +1170,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         if (!STOREFRONT_PREVIEWS_ONLY) {
           const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
           originalPath = `${base}-full.${ext}`;
-          const upOrig = await uploadWithRetry(sb, BUCKETS.originals, originalPath, file, {
+          const upOrig = await uploadWithRetry(BUCKETS.originals, originalPath, file, {
             contentType: file.type || 'image/jpeg',
             upsert: false,
             attempts: 5,
@@ -1181,7 +1183,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
           });
           if (upOrig.error) {
             try {
-              await sb.storage.from(BUCKETS.previews).remove([previewPath]);
+              await removeStoragePaths(BUCKETS.previews, [previewPath]);
             } catch {
               /* best-effort */
             }
@@ -1342,13 +1344,17 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         const label = p.code || p.source_filename || p.id;
         setProgress(`Marca de agua ${i + 1}/${withOrig.length}: #${label}`);
         try {
-          const { data: blob, error: dlErr } = await sb.storage
-            .from(BUCKETS.originals)
-            .download(p.original_path);
-          if (dlErr) throw dlErr;
-          if (!blob) throw new Error('Original vacío');
+          const signed = await presignStorage({
+            kind: BUCKETS.originals,
+            path: p.original_path,
+            op: 'get',
+            expiresIn: 600,
+          });
+          const res = await fetch(signed.url);
+          if (!res.ok) throw new Error(`No se pudo bajar original HTTP ${res.status}`);
+          const blob = await res.blob();
           const { previewBlob, width, height } = await makeWatermarkedPreview(blob);
-          const up = await uploadWithRetry(sb, BUCKETS.previews, p.preview_path, previewBlob, {
+          const up = await uploadWithRetry(BUCKETS.previews, p.preview_path, previewBlob, {
             contentType: 'image/jpeg',
             upsert: true,
             attempts: 4,
@@ -1561,20 +1567,20 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       // storage best-effort (no bloquear si falla un path)
       if (pathsP.length) {
         try {
-          await sb.storage.from(BUCKETS.previews).remove(pathsP);
+          await removeStoragePaths(BUCKETS.previews, pathsP);
         } catch (_) {}
       }
       if (cover.length) {
         try {
-          await sb.storage.from(BUCKETS.previews).remove(cover);
+          await removeStoragePaths(BUCKETS.previews, cover);
         } catch (_) {}
         try {
-          await sb.storage.from(BUCKETS.covers).remove(cover);
+          await removeStoragePaths(BUCKETS.covers, cover);
         } catch (_) {}
       }
       if (pathsO.length) {
         try {
-          await sb.storage.from(BUCKETS.originals).remove(pathsO);
+          await removeStoragePaths(BUCKETS.originals, pathsO);
         } catch (_) {}
       }
 

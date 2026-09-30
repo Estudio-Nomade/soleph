@@ -152,7 +152,6 @@ export async function loadPortfolioContent(fallback) {
  */
 export async function uploadPortfolioImage(file, folder = 'misc', opts = {}) {
   if (!isSupabaseConfigured()) throw new Error('Supabase no configurado');
-  const sb = getSupabase();
   const safeFolder = String(folder || 'misc')
     .replace(/[^a-z0-9_-]+/gi, '-')
     .slice(0, 40);
@@ -172,9 +171,8 @@ export async function uploadPortfolioImage(file, folder = 'misc', opts = {}) {
 
   const base = safeFileBase(file.name);
   const path = `portfolio/${safeFolder}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}-${base}.${ext}`;
-  const { error } = await uploadWithRetry(sb, BUCKETS.covers, path, blob, {
+  const { error } = await uploadWithRetry(BUCKETS.covers, path, blob, {
     contentType,
-    upsert: false,
     attempts: 4,
   });
   if (error) {

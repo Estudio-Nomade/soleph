@@ -1,7 +1,23 @@
 import { createClient } from '@supabase/supabase-js';
+import {
+  BUCKETS,
+  isMediaBaseConfigured,
+  publicObjectUrl,
+} from './object-storage-paths.js';
+
+export { BUCKETS };
 
 const url = String(import.meta.env.PUBLIC_SUPABASE_URL || '').trim();
 const anon = String(import.meta.env.PUBLIC_SUPABASE_ANON_KEY || '').trim();
+
+const LEGACY_PUBLIC_BUCKET = {
+  previews: 'album-previews',
+  originals: 'album-originals',
+  covers: 'album-covers',
+  'album-previews': 'album-previews',
+  'album-originals': 'album-originals',
+  'album-covers': 'album-covers',
+};
 
 /** @type {import('@supabase/supabase-js').SupabaseClient | null} */
 let browserClient = null;
@@ -54,13 +70,11 @@ export function getSupabase() {
 export function publicStorageUrl(bucket, path) {
   if (!path) return '';
   if (/^https?:\/\//i.test(path)) return path;
+  if (isMediaBaseConfigured()) {
+    return publicObjectUrl(bucket, path);
+  }
   const base = String(url || '').replace(/\/$/, '');
   const clean = String(path).replace(/^\//, '');
-  return `${base}/storage/v1/object/public/${bucket}/${clean}`;
+  const legacyBucket = LEGACY_PUBLIC_BUCKET[bucket] || bucket;
+  return `${base}/storage/v1/object/public/${legacyBucket}/${clean}`;
 }
-
-export const BUCKETS = {
-  previews: 'album-previews',
-  originals: 'album-originals',
-  covers: 'album-covers',
-};
