@@ -15,6 +15,9 @@ out/
 .env.*
 !.env.example
 
+# Ops local (temp passwords, s3.env, etc. — NUNCA commitear)
+.ops-local/
+
 # Logs
 *.log
 npm-debug.log*
