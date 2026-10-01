@@ -24,8 +24,8 @@ Panel para Sole. Storefront ya vende; el admin carga eventos, precios y fotos.
 
 ## Supabase
 
-- Ref: `xfjukxgkqgwmghteooht`
-- URL: `https://xfjukxgkqgwmghteooht.supabase.co`
+- Ref: `kmdxrjbofkfrzodjjmwj`
+- URL: `https://kmdxrjbofkfrzodjjmwj.supabase.co`
 - Keys en `.env` (`PUBLIC_SUPABASE_*`; service role solo server)
 - Correr: `supabase/schema.sql` + `supabase/categories.sql` en SQL Editor
 

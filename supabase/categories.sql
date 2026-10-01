@@ -1,5 +1,5 @@
 -- Camera file number as public photo code + categories (mansos/potros/damas/…)
--- Run in Supabase SQL editor of project xfjukxgkqgwmghteooht (or linked project).
+-- Run in Supabase SQL editor of linked Soleph project.
 
 create extension if not exists "pgcrypto";
 

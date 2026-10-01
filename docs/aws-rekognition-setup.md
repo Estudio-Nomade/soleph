@@ -133,7 +133,7 @@ AWS_BUDGET_LIMIT_USD=5
 
 ### Supabase Dashboard
 
-Project `xfjukxgkqgwmghteooht` → **Edge Functions → Secrets** (o Project Settings → Edge Functions):
+Project `kmdxrjbofkfrzodjjmwj` → **Edge Functions → Secrets** (o Project Settings → Edge Functions):
 
 | Name | Value |
 |------|--------|
@@ -142,7 +142,7 @@ Project `xfjukxgkqgwmghteooht` → **Edge Functions → Secrets** (o Project Set
 | `AWS_SECRET_ACCESS_KEY` | `...` |
 | `REKOGNITION_COLLECTION_PREFIX` | `soleph-` |
 | `SUPABASE_SERVICE_ROLE_KEY` | (la del proyecto, si no está auto) |
-| `SUPABASE_URL` | `https://xfjukxgkqgwmghteooht.supabase.co` |
+| `SUPABASE_URL` | `https://kmdxrjbofkfrzodjjmwj.supabase.co` |
 
 Nunca `PUBLIC_AWS_*`.
 
@@ -159,7 +159,7 @@ Desde la máquina (con CLI logueada):
 
 ```bash
 cd ~/Documentos/Estudio\ Nomade/Soleph
-supabase link --project-ref xfjukxgkqgwmghteooht
+supabase link --project-ref kmdxrjbofkfrzodjjmwj
 supabase secrets set \
   AWS_REGION=us-east-1 \
   AWS_ACCESS_KEY_ID=... \

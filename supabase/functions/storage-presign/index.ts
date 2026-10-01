@@ -54,6 +54,9 @@ function s3() {
     endpoint,
     forcePathStyle: true,
     credentials: { accessKeyId, secretAccessKey },
+    // SeaweedFS rejects AWS SDK default flexible checksums on presigned PUT (BadDigest)
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
   });
 }
 
@@ -110,6 +113,8 @@ Deno.serve(async (req) => {
         accessKeyId: Deno.env.get('S3_ACCESS_KEY_ID')!,
         secretAccessKey: Deno.env.get('S3_SECRET_ACCESS_KEY')!,
       },
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
     });
 
     const command =
