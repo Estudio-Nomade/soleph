@@ -58,23 +58,15 @@ const fullTitle = title === site.brand.name ? title : `${site.brand.name} - ${ti
       (function () {
         var b = document.body;
         if (!b) return;
-        function syncScrollRoom() {
-          var room = document.documentElement.scrollHeight > window.innerHeight + 120;
-          b.classList.toggle('has-scroll-room', room);
-        }
         function reveal() {
           b.classList.remove('is-page-loading');
-          syncScrollRoom();
         }
         if (document.readyState === 'complete') reveal();
         else window.addEventListener('load', reveal, { once: true });
         // Fallback si load tarda (imágenes pesadas): mostrar footer tras paint
         setTimeout(reveal, 900);
         window.addEventListener('pageshow', function (ev) {
-          if (ev.persisted) {
-            b.classList.remove('is-navigating', 'is-page-loading');
-            syncScrollRoom();
-          }
+          if (ev.persisted) b.classList.remove('is-navigating', 'is-page-loading');
         });
         document.addEventListener(
           'click',
@@ -104,27 +96,6 @@ const fullTitle = title === site.brand.name ? title : `${site.brand.name} - ${ti
         window.addEventListener('pagehide', function () {
           b.classList.add('is-navigating');
         });
-        var t;
-        window.addEventListener(
-          'scroll',
-          function () {
-            clearTimeout(t);
-            t = setTimeout(syncScrollRoom, 80);
-          },
-          { passive: true },
-        );
-        window.addEventListener('resize', function () {
-          clearTimeout(t);
-          t = setTimeout(syncScrollRoom, 80);
-        });
-        if (typeof ResizeObserver !== 'undefined') {
-          try {
-            new ResizeObserver(function () {
-              clearTimeout(t);
-              t = setTimeout(syncScrollRoom, 60);
-            }).observe(document.documentElement);
-          } catch (_) {}
-        }
       })();
     </script>
     <script>

@@ -1864,17 +1864,12 @@ body.lightbox-open {
 }
 
 .back-top {
-  display: none;
+  display: inline-block;
   margin: 0 auto 0.85rem;
   color: var(--navy);
   font-size: 0.9rem;
   min-height: var(--tap);
   line-height: var(--tap);
-}
-
-/* Solo si la página scrollea de verdad (no en shell “Cargando álbum…”) */
-body.has-scroll-room .back-top {
-  display: inline-block;
 }
 
 @media (min-width: 640px) {
