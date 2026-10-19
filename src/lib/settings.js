@@ -2,7 +2,7 @@ import { getSupabase, isSupabaseConfigured } from './supabase.js';
 
 const DEFAULT_TRANSFER = {
   owner: 'Sole Yaquinta',
-  alias: null,
+  alias: 'soleyaquinta.mp',
   cbu: null,
   bank: null,
 };
@@ -234,9 +234,20 @@ export async function loadStorefrontSettings(fallback = {}) {
     return {
       transfer: {
         owner: transferRaw.owner || baseTransfer.owner || DEFAULT_TRANSFER.owner,
-        alias: transferRaw.alias ?? baseTransfer.alias ?? null,
-        cbu: transferRaw.cbu ?? baseTransfer.cbu ?? null,
-        bank: transferRaw.bank ?? baseTransfer.bank ?? null,
+        // null/'' en SB no pisan el default del producto (alias público del carrito)
+        alias:
+          (typeof transferRaw.alias === 'string' && transferRaw.alias.trim()) ||
+          (typeof baseTransfer.alias === 'string' && baseTransfer.alias.trim()) ||
+          DEFAULT_TRANSFER.alias ||
+          null,
+        cbu:
+          (typeof transferRaw.cbu === 'string' && transferRaw.cbu.trim()) ||
+          (typeof baseTransfer.cbu === 'string' && baseTransfer.cbu.trim()) ||
+          null,
+        bank:
+          (typeof transferRaw.bank === 'string' && transferRaw.bank.trim()) ||
+          (typeof baseTransfer.bank === 'string' && baseTransfer.bank.trim()) ||
+          null,
       },
       formats: normalizeFormats(value.formats, baseFormats),
       album_messages: normalizeAlbumMessages(value.album_messages, baseAlbumMessages),

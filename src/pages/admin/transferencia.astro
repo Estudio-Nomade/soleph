@@ -26,8 +26,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         </label>
         <label>
           Alias
-          <input name="alias" maxlength="80" placeholder="sole.yaquinta" autocomplete="off" />
-          <span class="admin-inline-note">Es lo principal que copia el cliente en el home banking.</span>
+          <input name="alias" maxlength="80" placeholder="soleyaquinta.mp" autocomplete="off" />
+          <span class="admin-inline-note">Es lo principal que copia el cliente en el home banking. Default: soleyaquinta.mp.</span>
         </label>
         <label>
           CBU / CVU (opcional)
@@ -59,7 +59,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
   const DEFAULT_TRANSFER = {
     owner: 'Sole Yaquinta',
-    alias: null,
+    alias: 'soleyaquinta.mp',
     cbu: null,
     bank: null,
   };
@@ -80,7 +80,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   function fill(transfer) {
     if (!form) return;
     form.owner.value = transfer.owner || DEFAULT_TRANSFER.owner;
-    form.alias.value = transfer.alias || '';
+    form.alias.value = transfer.alias || DEFAULT_TRANSFER.alias;
     form.cbu.value = transfer.cbu || '';
     form.bank.value = transfer.bank || '';
   }
@@ -115,7 +115,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     showOk('');
     const fd = new FormData(form);
     const owner = String(fd.get('owner') || '').trim() || DEFAULT_TRANSFER.owner;
-    const alias = String(fd.get('alias') || '').trim() || null;
+    const alias = String(fd.get('alias') || '').trim() || DEFAULT_TRANSFER.alias;
     const cbuRaw = String(fd.get('cbu') || '').replace(/\s+/g, '');
     const cbu = cbuRaw || null;
     const bank = String(fd.get('bank') || '').trim() || null;
@@ -144,7 +144,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       );
       if (error) throw error;
       form._storefront = value;
-      showOk(alias ? `Listo. En la web se ve el alias “${alias}”.` : 'Guardado. Sin alias: el carrito avisa que lo confirmás por WhatsApp.');
+      showOk(`Listo. En la web se ve el alias “${alias}”.`);
     } catch (err) {
       showError(err?.message || 'No se pudo guardar');
     }
