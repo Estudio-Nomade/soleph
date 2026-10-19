@@ -45,7 +45,7 @@ const fullTitle = title === site.brand.name ? title : `${site.brand.name} - ${ti
       window.__SOLEPH_SITE_SEED__ = siteSeed;
     </script>
   </head>
-  <body id="top">
+  <body id="top" class="is-page-loading">
     <Header />
     <div class="site-wrap">
       <slot />
@@ -54,6 +54,50 @@ const fullTitle = title === site.brand.name ? title : `${site.brand.name} - ${ti
     <CartDrawer />
     <Lightbox />
     <ShopSelectBar />
+    <script is:inline>
+      (function () {
+        var b = document.body;
+        if (!b) return;
+        function reveal() {
+          b.classList.remove('is-page-loading');
+        }
+        if (document.readyState === 'complete') reveal();
+        else window.addEventListener('load', reveal, { once: true });
+        // Fallback si load tarda (imágenes pesadas): mostrar footer tras paint
+        setTimeout(reveal, 900);
+        window.addEventListener('pageshow', function (ev) {
+          if (ev.persisted) b.classList.remove('is-navigating', 'is-page-loading');
+        });
+        document.addEventListener(
+          'click',
+          function (e) {
+            var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+            if (!a) return;
+            if (e.defaultPrevented || e.button !== 0) return;
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            if (a.target && a.target !== '' && a.target !== '_self') return;
+            if (a.hasAttribute('download')) return;
+            var href = a.getAttribute('href') || '';
+            if (!href || href.charAt(0) === '#' || href.indexOf('mailto:') === 0 || href.indexOf('tel:') === 0)
+              return;
+            if (href.indexOf('javascript:') === 0) return;
+            try {
+              var url = new URL(a.href, window.location.href);
+              if (url.origin !== window.location.origin) return;
+              // mismo path+query: no es navegación real
+              if (url.pathname === window.location.pathname && url.search === window.location.search) return;
+            } catch (_) {
+              return;
+            }
+            b.classList.add('is-navigating');
+          },
+          true,
+        );
+        window.addEventListener('pagehide', function () {
+          b.classList.add('is-navigating');
+        });
+      })();
+    </script>
     <script>
       import '../scripts/image-guard.js';
     </script>
