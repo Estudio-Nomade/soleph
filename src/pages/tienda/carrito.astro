@@ -43,13 +43,7 @@ const formats = store.formats;
           <div><strong>Titular:</strong> {transfer.owner || 'Sole Yaquinta'}</div>
           <div data-transfer-alias>
             <strong>Alias:</strong>
-            {
-              transfer.alias ? (
-                <span class="transfer-value">{transfer.alias}</span>
-              ) : (
-                <span>Sole te lo confirma por WhatsApp si hace falta</span>
-              )
-            }
+            <span class="transfer-value">{transfer.alias || 'soleyaquinta.mp'}</span>
           </div>
           {
             transfer.cbu && (
@@ -150,12 +144,10 @@ const formats = store.formats;
 
   function paintTransfer(t) {
     if (!transferBox || !t) return;
-    const aliasHtml = t.alias
-      ? `<span class="transfer-value">${escapeHtml(t.alias)}</span>`
-      : '<span>Sole te lo confirma por WhatsApp si hace falta</span>';
+    const alias = String(t.alias || '').trim() || 'soleyaquinta.mp';
     transferBox.innerHTML = `
       <div><strong>Titular:</strong> ${escapeHtml(t.owner || 'Sole Yaquinta')}</div>
-      <div data-transfer-alias><strong>Alias:</strong> ${aliasHtml}</div>
+      <div data-transfer-alias><strong>Alias:</strong> <span class="transfer-value">${escapeHtml(alias)}</span></div>
       ${t.cbu ? `<div><strong>CBU/CVU:</strong> <span class="transfer-value">${escapeHtml(t.cbu)}</span></div>` : ''}
       ${t.bank ? `<div class="field-hint" style="margin-top:0.35rem;">${escapeHtml(t.bank)}</div>` : ''}
       <p class="field-hint" style="margin-top:0.65rem;">
@@ -308,7 +300,7 @@ const formats = store.formats;
     const orderId = 'ORD-' + Date.now().toString(36).toUpperCase();
     const transferLine = [
       transfer.owner || 'Sole Yaquinta',
-      transfer.alias ? `alias ${transfer.alias}` : null,
+      `alias ${String(transfer.alias || '').trim() || 'soleyaquinta.mp'}`,
       transfer.cbu ? transfer.cbu : null,
     ]
       .filter(Boolean)
