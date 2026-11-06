@@ -7,7 +7,7 @@ Sitio Astro para Sole Yaquinta (Tandil): portfolio fotográfico (contenido real 
 | Pieza | Rol |
 |-------|-----|
 | **Astro** (static) + CSS propio | Front / tienda / admin UI · navy `#012B55` |
-| **Vercel** | Hosting del sitio |
+| **Vercel** | Hosting del sitio + Web Analytics + Speed Insights (métricas / Core Web Vitals) |
 | **Supabase** | Auth admin + Postgres (álbumes, precios, settings, pedidos) + Edge Functions |
 | **SeaweedFS S3** (`s3.estudionomade.com.ar`) | Blobs de fotos (previews WM, covers; originals solo si aplica) |
 | **Carrito** | `localStorage` + checkout transferencia / WhatsApp |
@@ -38,6 +38,18 @@ Copiar `.env.example` → `.env` (nunca commitear `.env`).
 
 Handoff env cutover: `docs/handoffs/ENV-seaweed-storage.md`.  
 Secrets locales ops (keys, temp pass): `.ops-local/` (gitignored).
+
+### Métricas (visitas + performance)
+
+Sin pixel de Meta/Google por defecto (privacidad + cero keys en front).
+
+| Pieza | Qué mide | Dónde se ve |
+|-------|----------|-------------|
+| **Vercel Web Analytics** | Pageviews, visitors, top pages, referrers | Vercel → proyecto `soleph` → **Analytics** |
+| **Vercel Speed Insights** | Core Web Vitals reales (LCP, INP, CLS) | Vercel → **Speed Insights** |
+
+Código: `BaseLayout.astro` monta `@vercel/analytics` + `@vercel/speed-insights` (solo storefront; admin no).  
+**Una vez en prod:** en el dashboard del proyecto habilitar **Web Analytics** y **Speed Insights** (Hobby free con límites). Sin eso el script no rompe la web, pero no hay datos. Local/dev no acumula métricas útiles.
 
 ## Supabase (proyecto activo)
 

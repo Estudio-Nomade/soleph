@@ -5,6 +5,8 @@ import Footer from '../components/Footer.astro';
 import CartDrawer from '../components/CartDrawer.astro';
 import Lightbox from '../components/Lightbox.astro';
 import ShopSelectBar from '../components/ShopSelectBar.astro';
+import Analytics from '@vercel/analytics/astro';
+import SpeedInsights from '@vercel/speed-insights/astro';
 import site from '../data/site.json';
 
 interface Props {
@@ -101,5 +103,8 @@ const fullTitle = title === site.brand.name ? title : `${site.brand.name} - ${ti
     <script>
       import '../scripts/image-guard.js';
     </script>
+    <!-- Web Analytics + Core Web Vitals (Vercel dashboard → Analytics / Speed Insights) -->
+    <Analytics />
+    <SpeedInsights />
   </body>
 </html>
