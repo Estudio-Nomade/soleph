@@ -1704,6 +1704,14 @@ body.lightbox-open {
     0 8px 22px rgba(0, 0, 0, 0.4);
 }
 
+.lb-face-hit:disabled,
+.lb-face-hit.is-busy {
+  pointer-events: none;
+  cursor: wait;
+  opacity: 0.55;
+  transform: none;
+}
+
 .lb-face-hit::after {
   content: 'Buscar esta cara';
   position: absolute;
