@@ -120,6 +120,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   let faceFilterThumbSrc = null;
   /** @type {string | null} */
   let detectReqId = null;
+  /** Monotonic id so stale detect/search results are ignored */
+  let faceSearchGen = 0;
+  let faceSearchInFlight = false;
+  /** @type {AbortController | null} */
+  let faceSearchAbort = null;
 
   ensureSelectBar();
 
@@ -245,11 +250,17 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
   function paintFaceFilterChrome() {
     const on = !!faceFilterIds;
+    const tileCount = on ? photosForGrid().length : 0;
     if (faceFilterBar) faceFilterBar.hidden = !on;
     if (faceFilterTitle) faceFilterTitle.hidden = !on;
     if (faceFilterLabel && faceFilterIds) {
-      const n = faceFilterIds.length;
-      faceFilterLabel.textContent = n === 1 ? '1 foto de esta persona' : `${n} fotos de esta persona`;
+      const n = tileCount;
+      faceFilterLabel.textContent =
+        n === 0
+          ? 'Sin fotos de esta persona'
+          : n === 1
+            ? '1 foto de esta persona'
+            : `${n} fotos de esta persona`;
     }
     if (faceFilterThumb) {
       if (faceFilterThumbSrc) {
@@ -260,8 +271,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         faceFilterThumb.hidden = true;
       }
     }
+    // Join-zero (Edge ids not in album.photos) counts as empty
     if (faceEmptyEl) {
-      faceEmptyEl.hidden = !(on && faceFilterIds && faceFilterIds.length === 0);
+      faceEmptyEl.hidden = !(on && tileCount === 0);
     }
   }
 
@@ -341,15 +353,60 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   }
 
   /**
-   * @param {{ photoIds: string[], thumbSrc?: string, token?: string }} args
+   * Join Edge photoIds with album.photos so orphan ids don't leave a blank grid.
+   * @param {string[]} photoIds
+   * @returns {string[]}
    */
-  function applyFaceFilter({ photoIds, thumbSrc, token }) {
-    faceFilterIds = Array.isArray(photoIds) ? photoIds : [];
+  function joinFacePhotoIds(photoIds) {
+    const all = Array.isArray(album?.photos) ? album.photos : [];
+    const byId = new Map(all.map((p) => [p.id, p]));
+    const seen = new Set();
+    /** @type {string[]} */
+    const out = [];
+    for (const id of photoIds || []) {
+      if (!id || seen.has(id) || !byId.has(id)) continue;
+      seen.add(id);
+      out.push(id);
+    }
+    return out;
+  }
+
+  /**
+   * @param {{
+   *   photoIds: string[],
+   *   thumbSrc?: string,
+   *   token?: string,
+   *   sourcePhotoId?: string,
+   *   statusMsg?: string,
+   * }} args
+   */
+  function applyFaceFilter({ photoIds, thumbSrc, token, sourcePhotoId, statusMsg }) {
+    const joined = joinFacePhotoIds(Array.isArray(photoIds) ? photoIds : []);
+    faceFilterIds = joined;
     faceFilterThumbSrc = thumbSrc || null;
     if (token) setCaraInUrl(token);
-    setFaceStatus('');
     renderSections();
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    if (statusMsg) {
+      setFaceStatus(statusMsg);
+      return;
+    }
+    if (!joined.length) {
+      setFaceStatus('No encontramos más fotos de esta persona.');
+      return;
+    }
+    if (sourcePhotoId && joined.length === 1 && joined[0] === sourcePhotoId) {
+      setFaceStatus('Solo vimos esta foto de esa cara.');
+      return;
+    }
+    setFaceStatus('');
+  }
+
+  function finishFaceSearchUi(api) {
+    faceSearchInFlight = false;
+    api?.setFaceLoading?.(false, undefined, { owner: 'search' });
+    api?.setFaceHitsDisabled?.(false);
   }
 
   /**
@@ -358,60 +415,95 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
    */
   async function runFaceSearchFromBox(box, item) {
     if (!album || !faceSearchOn() || !item?.src || !item?.photoId) return;
+    if (faceSearchInFlight) return;
+
     const api = lb();
-    api?.setFaceLoading?.(true, 'Buscando fotos…');
+    // Invalidate any in-flight detect so its finally can't clear search loading
+    detectReqId = null;
+    faceSearchInFlight = true;
+    const gen = ++faceSearchGen;
+    faceSearchAbort?.abort();
+    faceSearchAbort = new AbortController();
+    const { signal } = faceSearchAbort;
+
+    api?.setFaceHitsDisabled?.(true);
+    api?.setFaceLoading?.(true, 'Buscando fotos…', { owner: 'search' });
     setFaceStatus('Buscando fotos de esta persona…');
+
     try {
-      const crop = await cropFaceFromImage(item.src, box, { pad: 0.28, maxSide: 640 });
+      const crop = await cropFaceFromImage(item.src, box, {
+        pad: 0.28,
+        maxSide: 640,
+        signal,
+      });
+      if (gen !== faceSearchGen) return;
+
       const token = encodeCaraToken({ photoId: item.photoId, box });
       const result = await searchAlbumBySelfie({
         albumId: album.id,
         selfie: crop,
         limit: 100,
+        signal,
       });
+      if (gen !== faceSearchGen) return;
+
+      // Always leave lightbox so status/filter above are visible
       api?.close?.();
+
       if (result.noFace) {
         setFaceStatus('No se reconoció bien esa cara. Probá otra.');
         return;
       }
+      if (result.notIndexed) {
+        setFaceStatus(
+          'Este evento todavía no tiene caras listas para buscar. Probá más tarde o avisá a Sole.',
+        );
+        return;
+      }
+
       applyFaceFilter({
         photoIds: result.photoIds || [],
         thumbSrc: crop,
         token,
+        sourcePhotoId: item.photoId,
       });
-      if (!(result.photoIds || []).length) {
-        setFaceStatus('No encontramos más fotos de esta persona.');
-      }
     } catch (err) {
+      if (gen !== faceSearchGen) return;
       console.warn('face click search', err);
+      api?.close?.();
       setFaceStatus(err?.message || 'No se pudo buscar esa cara.');
     } finally {
-      api?.setFaceLoading?.(false);
+      if (gen === faceSearchGen) finishFaceSearchUi(api);
     }
   }
 
   async function detectForCurrentItem(item) {
     if (!album || !faceSearchOn() || !item?.src) return;
+    // Don't start detect while a face search is running (shared overlay)
+    if (faceSearchInFlight) return;
     const api = lb();
     const req = `${item.photoId || item.src}:${Date.now()}`;
     detectReqId = req;
     api?.clearFaces?.();
-    api?.setFaceLoading?.(true, 'Detectando caras…');
+    api?.setFaceLoading?.(true, 'Detectando caras…', { owner: 'detect' });
     try {
       const { faces } = await detectPhotoFaces({
         albumId: album.id,
         image: item.src,
         photoId: item.photoId,
       });
-      if (detectReqId !== req) return;
+      if (detectReqId !== req || faceSearchInFlight) return;
       const cur = api?.current?.();
       if (cur && item.photoId && cur.photoId && cur.photoId !== item.photoId) return;
       api?.setFaces?.(faces || []);
     } catch (err) {
       console.warn('face detect', err);
-      if (detectReqId === req) api?.clearFaces?.();
+      if (detectReqId === req && !faceSearchInFlight) api?.clearFaces?.();
     } finally {
-      if (detectReqId === req) api?.setFaceLoading?.(false);
+      // Owner 'detect' — won't clear search spinner if search took over
+      if (detectReqId === req) {
+        api?.setFaceLoading?.(false, undefined, { owner: 'detect' });
+      }
     }
   }
 
@@ -443,21 +535,37 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       return;
     }
     setFaceStatus('Cargando fotos de esta persona…');
+    const ctrl = new AbortController();
     try {
-      const crop = await cropFaceFromImage(photo.src, decoded.box, { pad: 0.28, maxSide: 640 });
+      const crop = await cropFaceFromImage(photo.src, decoded.box, {
+        pad: 0.28,
+        maxSide: 640,
+        signal: ctrl.signal,
+      });
       const result = await searchAlbumBySelfie({
         albumId: album.id,
         selfie: crop,
         limit: 100,
+        signal: ctrl.signal,
       });
+      if (result.noFace) {
+        setFaceStatus('No se reconoció bien esa cara en el link. Tocá otra cara.');
+        setCaraInUrl(null);
+        return;
+      }
+      if (result.notIndexed) {
+        setFaceStatus(
+          'Este evento todavía no tiene caras listas para buscar. Probá más tarde o avisá a Sole.',
+        );
+        setCaraInUrl(null);
+        return;
+      }
       applyFaceFilter({
         photoIds: result.photoIds || [],
         thumbSrc: crop,
         token,
+        sourcePhotoId: decoded.photoId,
       });
-      if (!(result.photoIds || []).length) {
-        setFaceStatus('No encontramos fotos para este link.');
-      }
     } catch (err) {
       console.warn('cara hydrate', err);
       setFaceStatus(err?.message || 'No se pudo aplicar el filtro de cara.');

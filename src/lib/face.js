@@ -12,6 +12,9 @@ import { getSupabase, isSupabaseConfigured, publicStorageUrl, BUCKETS } from './
 export const FACE_MODEL = 'aws-rekognition';
 /** Rekognition similarity 0–100 */
 export const DEFAULT_MATCH_THRESHOLD = 85;
+/** Client timeout for Edge face-search / face-detect / crop (~15–20s) */
+export const FACE_REQUEST_TIMEOUT_MS = 18000;
+export const FACE_TIMEOUT_MESSAGE = 'Tardó demasiado. Probá de nuevo.';
 
 function functionsBase() {
   const url = import.meta.env.PUBLIC_SUPABASE_URL;
@@ -26,9 +29,42 @@ function anonKey() {
 }
 
 /**
+ * @param {AbortSignal | undefined} outer
+ * @param {number} timeoutMs
+ * @returns {{ signal: AbortSignal, clear: () => void }}
+ */
+function combineTimeoutSignal(outer, timeoutMs) {
+  const ctrl = new AbortController();
+  const onOuter = () => ctrl.abort();
+  if (outer) {
+    if (outer.aborted) ctrl.abort();
+    else outer.addEventListener('abort', onOuter, { once: true });
+  }
+  const timer =
+    timeoutMs > 0
+      ? setTimeout(() => ctrl.abort(), timeoutMs)
+      : null;
+  return {
+    signal: ctrl.signal,
+    clear() {
+      if (timer) clearTimeout(timer);
+      if (outer) outer.removeEventListener('abort', onOuter);
+    },
+  };
+}
+
+function isAbortError(err) {
+  return (
+    err?.name === 'AbortError' ||
+    err?.code === 20 ||
+    /aborted|AbortError/i.test(String(err?.message || ''))
+  );
+}
+
+/**
  * @param {string} name
  * @param {Record<string, unknown>} body
- * @param {{ auth?: boolean }} [opts]
+ * @param {{ auth?: boolean, requireAuth?: boolean, signal?: AbortSignal, timeoutMs?: number }} [opts]
  */
 async function invokeFunction(name, body, opts = {}) {
   const headers = {
@@ -54,11 +90,23 @@ async function invokeFunction(name, body, opts = {}) {
     }
   }
 
-  const res = await fetch(`${functionsBase()}/${name}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
+  const timeoutMs = opts.timeoutMs != null ? Number(opts.timeoutMs) : FACE_REQUEST_TIMEOUT_MS;
+  const { signal, clear } = combineTimeoutSignal(opts.signal, timeoutMs);
+
+  let res;
+  try {
+    res = await fetch(`${functionsBase()}/${name}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (err) {
+    clear();
+    if (isAbortError(err)) throw new Error(FACE_TIMEOUT_MESSAGE);
+    throw err;
+  }
+  clear();
 
   let json = null;
   try {
@@ -256,14 +304,15 @@ function round4(n) {
  * Recorta una cara (ratios 0–1) de una imagen → data URL JPEG.
  * @param {string} imageUrl
  * @param {{ left: number, top: number, width: number, height: number }} box
- * @param {{ pad?: number, maxSide?: number }} [opts]
+ * @param {{ pad?: number, maxSide?: number, signal?: AbortSignal, timeoutMs?: number }} [opts]
  * @returns {Promise<string>}
  */
 export async function cropFaceFromImage(imageUrl, box, opts = {}) {
   const pad = opts.pad != null ? Number(opts.pad) : 0.25;
   const maxSide = opts.maxSide != null ? Number(opts.maxSide) : 640;
+  const timeoutMs = opts.timeoutMs != null ? Number(opts.timeoutMs) : FACE_REQUEST_TIMEOUT_MS;
 
-  const img = await loadImageElement(imageUrl);
+  const img = await loadImageElement(imageUrl, { signal: opts.signal, timeoutMs });
   const nw = img.naturalWidth || img.width;
   const nh = img.naturalHeight || img.height;
   if (!nw || !nh) throw new Error('No se pudo medir la imagen');
@@ -295,25 +344,55 @@ export async function cropFaceFromImage(imageUrl, box, opts = {}) {
 
 /**
  * @param {string} src
+ * @param {{ signal?: AbortSignal, timeoutMs?: number }} [opts]
  * @returns {Promise<HTMLImageElement>}
  */
-async function loadImageElement(src) {
+async function loadImageElement(src, opts = {}) {
+  const timeoutMs = opts.timeoutMs != null ? Number(opts.timeoutMs) : FACE_REQUEST_TIMEOUT_MS;
+  const { signal, clear } = combineTimeoutSignal(opts.signal, timeoutMs);
+
   // Prefer blob URL so canvas crop works even when Storage CORS is picky
   let objectUrl = '';
   try {
-    const res = await fetch(src, { mode: 'cors' });
+    const res = await fetch(src, { mode: 'cors', signal });
     if (res.ok) {
       const blob = await res.blob();
       objectUrl = URL.createObjectURL(blob);
     }
-  } catch {
+  } catch (err) {
+    if (isAbortError(err)) {
+      clear();
+      throw new Error(FACE_TIMEOUT_MESSAGE);
+    }
     /* fall through to direct src */
   }
+
   const finalSrc = objectUrl || src;
   return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      clear();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      reject(new Error(FACE_TIMEOUT_MESSAGE));
+      return;
+    }
+
     const img = new Image();
     if (!objectUrl) img.crossOrigin = 'anonymous';
+
+    const cleanup = () => {
+      clear();
+      signal.removeEventListener('abort', onAbort);
+    };
+    const onAbort = () => {
+      cleanup();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      img.src = '';
+      reject(new Error(FACE_TIMEOUT_MESSAGE));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+
     img.onload = () => {
+      cleanup();
       if (objectUrl) {
         // revoke after a tick — drawImage already has pixels decoded
         setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
@@ -321,6 +400,7 @@ async function loadImageElement(src) {
       resolve(img);
     };
     img.onerror = () => {
+      cleanup();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
       reject(new Error('No se pudo cargar la imagen para recortar'));
     };
@@ -328,11 +408,23 @@ async function loadImageElement(src) {
   });
 }
 
+/**
+ * @param {{
+ *   albumId: string,
+ *   selfie: File|Blob|string,
+ *   threshold?: number,
+ *   limit?: number,
+ *   signal?: AbortSignal,
+ *   timeoutMs?: number,
+ * }} args
+ */
 export async function searchAlbumBySelfie({
   albumId,
   selfie,
   threshold = DEFAULT_MATCH_THRESHOLD,
   limit = 60,
+  signal,
+  timeoutMs = FACE_REQUEST_TIMEOUT_MS,
 }) {
   if (!isSupabaseConfigured()) throw new Error('Supabase no configurado');
 
@@ -342,7 +434,16 @@ export async function searchAlbumBySelfie({
   } else if (selfie instanceof Blob || selfie instanceof File) {
     imageBase64 = await blobToDataUrl(selfie);
   } else if (typeof selfie === 'string' && /^https?:\/\//i.test(selfie)) {
-    const res = await fetch(selfie);
+    const { signal: fetchSignal, clear } = combineTimeoutSignal(signal, timeoutMs);
+    let res;
+    try {
+      res = await fetch(selfie, { signal: fetchSignal });
+    } catch (err) {
+      clear();
+      if (isAbortError(err)) throw new Error(FACE_TIMEOUT_MESSAGE);
+      throw err;
+    }
+    clear();
     if (!res.ok) throw new Error('No se pudo cargar el selfie');
     imageBase64 = await blobToDataUrl(await res.blob());
   } else {
@@ -352,15 +453,29 @@ export async function searchAlbumBySelfie({
   // AWS SearchFacesByImage MaxFaces max is 4096; keep sane cap for UI
   const maxFaces = Math.min(Math.max(1, Number(limit) || 60), 100);
 
-  const json = await invokeFunction('face-search', {
-    albumId,
-    imageBase64,
-    threshold,
-    maxFaces,
-  });
+  const json = await invokeFunction(
+    'face-search',
+    {
+      albumId,
+      imageBase64,
+      threshold,
+      maxFaces,
+    },
+    { signal, timeoutMs },
+  );
 
-  if (json.message && /no face|InvalidParameter|no faces/i.test(String(json.message))) {
-    return { photoIds: [], matches: [], noFace: true };
+  if (json.noFace === true) {
+    return {
+      photoIds: [],
+      matches: [],
+      noFace: true,
+      notIndexed: false,
+      message: String(json.message || ''),
+    };
+  }
+
+  if (json.message && /no face|InvalidParameter|no faces|sin cara/i.test(String(json.message))) {
+    return { photoIds: [], matches: [], noFace: true, notIndexed: false, message: String(json.message) };
   }
 
   const matches = (json.matches || []).map((row) => ({
@@ -380,7 +495,7 @@ export async function searchAlbumBySelfie({
   if (!matches.length && !json.photoIds?.length) {
     // distinguish "no face in selfie" vs "no match" when possible
     if (json.searchedFaceConfidence != null && json.searchedFaceConfidence < 70) {
-      return { photoIds: [], matches: [], noFace: true, notIndexed: false };
+      return { photoIds: [], matches: [], noFace: true, notIndexed: false, message: msg };
     }
   }
 

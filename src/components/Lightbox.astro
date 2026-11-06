@@ -32,6 +32,9 @@
   let facesEnabled = false;
   /** @type {{ left: number, top: number, width: number, height: number }[]} */
   let currentFaces = [];
+  /** @type {'detect' | 'search' | null} */
+  let faceLoadOwner = null;
+  let faceHitsBusy = false;
 
   /**
    * @param {string[] | { src: string, photoId?: string, meta?: Record<string, unknown> }[]} list
@@ -59,7 +62,7 @@
     onChange = typeof opts?.onChange === 'function' ? opts.onChange : null;
     onFaceClick = typeof opts?.onFaceClick === 'function' ? opts.onFaceClick : null;
     clearFaces();
-    setFaceLoading(false);
+    setFaceLoading(false, undefined, { force: true });
     if (faceHint) faceHint.hidden = true;
     show();
     root?.classList.add('is-open');
@@ -73,14 +76,17 @@
     root?.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('lightbox-open');
     clearFaces();
-    setFaceLoading(false);
+    setFaceLoading(false, undefined, { force: true });
     if (faceHint) faceHint.hidden = true;
   }
 
   function show() {
     if (!img || !items.length) return;
     clearFaces();
-    setFaceLoading(false);
+    // Don't kill an in-flight face search when flipping photos; only reset detect UI.
+    if (faceLoadOwner !== 'search') {
+      setFaceLoading(false, undefined, { force: true });
+    }
     if (faceHint) faceHint.hidden = true;
     const src = items[index].src;
     // force reload path so load event + face detect re-run on same src
@@ -118,14 +124,42 @@
   }
 
   /**
+   * Loading overlay with owner so detect finally can't clear search (and vice versa).
    * @param {boolean} on
    * @param {string} [label]
+   * @param {{ owner?: 'detect' | 'search', force?: boolean }} [opts]
    */
-  function setFaceLoading(on, label) {
+  function setFaceLoading(on, label, opts = {}) {
     if (!faceLoading) return;
-    faceLoading.hidden = !on;
-    if (on && label) faceLoading.textContent = label;
-    else if (on) faceLoading.textContent = 'Detectando caras…';
+    const owner = opts.owner || 'detect';
+    if (on) {
+      // search outranks detect; detect can't steal search spinner
+      if (faceLoadOwner === 'search' && owner === 'detect') return;
+      faceLoadOwner = owner;
+      faceLoading.hidden = false;
+      if (label) faceLoading.textContent = label;
+      else faceLoading.textContent = owner === 'search' ? 'Buscando fotos…' : 'Detectando caras…';
+      if (owner === 'search') setFaceHitsDisabled(true);
+      return;
+    }
+    if (!opts.force && faceLoadOwner && faceLoadOwner !== owner) return;
+    const wasSearch = faceLoadOwner === 'search';
+    faceLoadOwner = null;
+    faceLoading.hidden = true;
+    if (wasSearch || opts.force) setFaceHitsDisabled(false);
+  }
+
+  /**
+   * Block double-tap on face boxes while a search is running.
+   * @param {boolean} disabled
+   */
+  function setFaceHitsDisabled(disabled) {
+    faceHitsBusy = !!disabled;
+    if (!faceLayer) return;
+    faceLayer.querySelectorAll('.lb-face-hit').forEach((btn) => {
+      /** @type {HTMLButtonElement} */ (btn).disabled = faceHitsBusy;
+      btn.classList.toggle('is-busy', faceHitsBusy);
+    });
   }
 
   function clearFaces() {
@@ -197,16 +231,21 @@
       btn.style.height = `${f.height * 100}%`;
       btn.setAttribute('aria-label', 'Buscar fotos de esta cara');
       btn.dataset.faceIndex = String(i);
+      if (faceHitsBusy) {
+        btn.disabled = true;
+        btn.classList.add('is-busy');
+      }
       btn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (faceHitsBusy || btn.disabled) return;
         const item = items[index];
         if (item) onFaceClick?.(f, item, index);
       });
       faceLayer.appendChild(btn);
     });
 
-    if (faceHint) faceHint.hidden = false;
+    if (faceHint) faceHint.hidden = faceHitsBusy;
   }
 
   img?.addEventListener('load', () => {
@@ -255,6 +294,7 @@
     setFaces,
     clearFaces,
     setFaceLoading,
+    setFaceHitsDisabled,
     paintFaces,
   };
 </script>

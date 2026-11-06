@@ -99,9 +99,30 @@ Deno.serve(async (req) => {
         }),
       );
     } catch (err: unknown) {
-      const name = (err as { name?: string })?.name || '';
+      const awsErr = err as { name?: string; message?: string; Code?: string };
+      const name = awsErr?.name || awsErr?.Code || '';
+      const msg = String(awsErr?.message || '');
       if (name === 'ResourceNotFoundException') {
-        return json({ photoIds: [], matches: [], message: 'Evento sin caras indexadas todavía' });
+        return json({
+          photoIds: [],
+          matches: [],
+          noFace: false,
+          message: 'Evento sin caras indexadas todavía',
+        });
+      }
+      // Crop/selfie without a usable face → not a 500; client shows noFace copy
+      if (
+        name === 'InvalidParameterException' ||
+        /no faces? in the image|there are no faces|unable to (get|detect) face|could not detect any face/i.test(
+          msg,
+        )
+      ) {
+        return json({
+          photoIds: [],
+          matches: [],
+          noFace: true,
+          message: 'No se reconoció una cara en la imagen',
+        });
       }
       throw err;
     }
