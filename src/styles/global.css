@@ -846,6 +846,32 @@ select {
   gap: 0.45rem;
 }
 
+.photo-tile {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 220px;
+}
+
+@media (min-width: 640px) {
+  .photo-tile {
+    contain-intrinsic-size: auto 280px;
+  }
+}
+
+.photo-grid-more {
+  display: flex;
+  justify-content: center;
+  margin: 1.1rem 0 0.35rem;
+}
+
+.photo-grid-more .btn {
+  min-width: min(100%, 280px);
+}
+
+/* Reserva altura en home para que el hydrate live no mueva el LCP */
+.shop-section--events .album-grid[data-live-events]:not([hidden]) {
+  min-height: 12rem;
+}
+
 .shop-tools--row {
   flex-direction: column;
   align-items: stretch;

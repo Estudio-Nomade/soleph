@@ -11,6 +11,8 @@ const currency = site.shop.currencySymbol;
 <BaseLayout
   title={`${site.brand.name} — Tienda`}
   description="Comprá tus fotos de eventos. Buscá por selfie o llevate series del portafolio."
+  lcpImage="/images/fotoportada.jpg"
+  lcpImageMobile="/images/fotoportada-sm.jpg"
 >
   <main class="page page--home">
     <header class="home-hero">
@@ -18,6 +20,8 @@ const currency = site.shop.currencySymbol;
         <img
           class="home-hero-bg"
           src="/images/fotoportada.jpg"
+          srcset="/images/fotoportada-sm.jpg 900w, /images/fotoportada.jpg 1280w"
+          sizes="100vw"
           alt=""
           width="1280"
           height="853"
@@ -31,6 +35,8 @@ const currency = site.shop.currencySymbol;
             alt={site.brand.name}
             width="542"
             height="150"
+            decoding="async"
+            fetchpriority="low"
           />
         </div>
       </div>
@@ -70,7 +76,15 @@ const currency = site.shop.currencySymbol;
                 href={`/tienda/${album.id}`}
                 data-album-name={`${album.name} ${album.date_label || ''}`.toLowerCase()}
               >
-                <img src={album.cover} alt={album.name} loading="lazy" width="1000" height="625" />
+                <img
+                  src={album.cover}
+                  alt={album.name}
+                  loading="lazy"
+                  decoding="async"
+                  width="1000"
+                  height="625"
+                  sizes="(max-width: 639px) 100vw, (max-width: 932px) 50vw, 33vw"
+                />
                 <div class="body">
                   <h3>{album.name}</h3>
                   <div class="meta">
@@ -103,7 +117,15 @@ const currency = site.shop.currencySymbol;
               data-album-name={`${album.name} ${album.date_label || ''}`.toLowerCase()}
               data-portfolio-id={album.id}
             >
-              <img src={album.cover} alt={album.name} loading="lazy" width="800" height="500" />
+              <img
+                src={album.cover}
+                alt={album.name}
+                loading="lazy"
+                decoding="async"
+                width="800"
+                height="500"
+                sizes="(max-width: 639px) 100vw, (max-width: 932px) 50vw, 25vw"
+              />
               <div class="body">
                 <h3>{album.name}</h3>
                 <div class="meta" data-album-meta>
@@ -179,8 +201,13 @@ const currency = site.shop.currencySymbol;
     const filter = `${album.name || ''} ${date}`.toLowerCase();
     const kind = album.kind === 'portfolio' ? 'portfolio' : 'event';
     const cls = compact ? 'album-card album-card--compact' : 'album-card';
+    const w = compact ? 800 : 1000;
+    const h = compact ? 500 : 625;
+    const sizes = compact
+      ? '(max-width: 639px) 100vw, (max-width: 932px) 50vw, 25vw'
+      : '(max-width: 639px) 100vw, (max-width: 932px) 50vw, 33vw';
     return `<a class="${cls}" href="${href}" data-album-name="${escapeHtml(filter)}" data-live="1" data-live-kind="${kind}">
-      <img src="${cover}" alt="${name}" loading="lazy" width="${compact ? 800 : 1000}" height="${compact ? 500 : 625}" />
+      <img src="${cover}" alt="${name}" loading="lazy" decoding="async" width="${w}" height="${h}" sizes="${sizes}" />
       <div class="body">
         <h3>${name}</h3>
         <div class="meta">${escapeHtml(formatMeta(date, count))}</div>
