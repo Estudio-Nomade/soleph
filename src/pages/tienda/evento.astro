@@ -125,6 +125,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   let faceSearchInFlight = false;
   /** @type {AbortController | null} */
   let faceSearchAbort = null;
+  /** Pagination for big event grids (DOM + network). */
+  const GRID_PAGE = 48;
+  let gridVisibleCount = 0;
 
   ensureSelectBar();
 
@@ -170,9 +173,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     el.dataset.unit = String(unit);
     if (photo.categoryId) el.dataset.cat = photo.categoryId;
     el.dataset.wm = 'css';
+    const eager = arguments.length > 2 && arguments[2] === true;
     el.innerHTML = `
       <button type="button" class="photo-tile-open" data-open-photo aria-label="Ver #${escapeHtml(code)} en grande">
-        <img src="${escapeHtml(photo.thumb || photo.src)}" alt="#${escapeHtml(code)}" loading="lazy" width="600" height="600" draggable="false" />
+        <img src="${escapeHtml(photo.thumb || photo.src)}" alt="#${escapeHtml(code)}" loading="${eager ? 'eager' : 'lazy'}" decoding="async" width="600" height="600" sizes="(max-width: 639px) 50vw, 33vw" draggable="false" />
         <span class="wm-overlay" aria-hidden="true"></span>
       </button>
       <span class="photo-code-badge" title="Código de la foto">#${escapeHtml(code)}</span>
@@ -184,6 +188,67 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     `;
     bindPhotoTile(el, sectionsEl || document);
     return el;
+  }
+
+  /**
+   * @param {any[]} list
+   * @param {number} unit
+   * @param {HTMLElement} grid
+   * @param {number} from
+   * @param {number} to
+   */
+  function appendTiles(list, unit, grid, from, to) {
+    const frag = document.createDocumentFragment();
+    const end = Math.min(to, list.length);
+    for (let i = from; i < end; i += 1) {
+      frag.appendChild(makeTile(list[i], unit, i < from + 8));
+    }
+    grid.appendChild(frag);
+  }
+
+  /**
+   * @param {any[]} list
+   * @param {number} unit
+   * @param {HTMLElement} section
+   * @param {boolean} [paginate]
+   */
+  function fillGrid(list, unit, section, paginate = true) {
+    const grid = document.createElement('div');
+    grid.className = 'photo-grid';
+    grid.dataset.photoGrid = '';
+    const total = list.length;
+    const initial = paginate ? Math.min(GRID_PAGE, total) : total;
+    gridVisibleCount = initial;
+    appendTiles(list, unit, grid, 0, initial);
+    section.appendChild(grid);
+
+    if (paginate && total > initial) {
+      const moreWrap = document.createElement('div');
+      moreWrap.className = 'photo-grid-more';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-ghost';
+      btn.dataset.loadMore = '';
+      const remaining = () => total - gridVisibleCount;
+      const paintLabel = () => {
+        const left = remaining();
+        btn.textContent =
+          left <= 0 ? 'Listo' : `Cargar más fotos (${Math.min(GRID_PAGE, left)} de ${left})`;
+        btn.hidden = left <= 0;
+        moreWrap.hidden = left <= 0;
+      };
+      paintLabel();
+      btn.addEventListener('click', () => {
+        const from = gridVisibleCount;
+        const to = Math.min(from + GRID_PAGE, total);
+        appendTiles(list, unit, grid, from, to);
+        gridVisibleCount = to;
+        paintAllTiles(sectionsEl);
+        paintLabel();
+      });
+      moreWrap.appendChild(btn);
+      section.appendChild(moreWrap);
+    }
   }
 
   function groupPhotos() {
@@ -297,10 +362,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       const section = document.createElement('section');
       section.className = 'album-cat-section';
       section.dataset.catSection = 'face';
-      const grid = document.createElement('div');
-      grid.className = 'photo-grid';
-      for (const photo of list) grid.appendChild(makeTile(photo, unit));
-      section.appendChild(grid);
+      // face results usually small — still paginate if huge
+      fillGrid(list, unit, section, list.length > GRID_PAGE);
       sectionsEl.appendChild(section);
       paintAllTiles(sectionsEl);
       return;
@@ -310,10 +373,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       const section = document.createElement('section');
       section.className = 'album-cat-section';
       section.dataset.catSection = 'all';
-      const grid = document.createElement('div');
-      grid.className = 'photo-grid';
-      for (const photo of album.photos) grid.appendChild(makeTile(photo, unit));
-      section.appendChild(grid);
+      fillGrid(album.photos, unit, section, true);
       sectionsEl.appendChild(section);
       paintAllTiles(sectionsEl);
       return;
@@ -328,10 +388,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             <h2>${escapeHtml(g.name)}</h2>
             <p class="shop-section-note">${g.photos.length} foto${g.photos.length === 1 ? '' : 's'}</p>
           </div>`;
-      const grid = document.createElement('div');
-      grid.className = 'photo-grid';
-      for (const photo of g.photos) grid.appendChild(makeTile(photo, unit));
-      section.appendChild(grid);
+      fillGrid(g.photos, unit, section, true);
       sectionsEl.appendChild(section);
     }
     paintAllTiles(sectionsEl);

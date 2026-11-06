@@ -15,6 +15,10 @@ interface Props {
   ogImage?: string;
   /** Meta robots. Default: SEO on + señales noai. Tienda live: noindex. */
   robots?: string;
+  /** LCP image path (e.g. hero). Preload + high priority. */
+  lcpImage?: string;
+  /** Optional mobile LCP src for srcset consumers; also preloaded as image. */
+  lcpImageMobile?: string;
 }
 
 const {
@@ -22,9 +26,60 @@ const {
   description = `${site.brand.name} — ${site.brand.tagline}. ${site.brand.location}.`,
   ogImage = site.projects[0]?.cover || '/images/logo.png',
   robots = 'index, follow, noai, noimageai',
+  lcpImage,
+  lcpImageMobile,
 } = Astro.props;
 
 const fullTitle = title === site.brand.name ? title : `${site.brand.name} - ${title}`;
+
+// Slim globals: no full photo arrays on every page (LCP/FCP parse cost).
+const shopAlbumsLite = (site.shop.albums || []).map((a) => ({
+  id: a.id,
+  name: a.name,
+  kind: a.kind || 'event',
+  date_label: a.date_label || null,
+  cover: a.cover,
+  photo_count: a.photo_count || (Array.isArray(a.photos) ? a.photos.length : 0),
+  photo_price: a.photo_price,
+  price_tiers: a.price_tiers || [],
+  message: a.message || null,
+  search_by_face: a.search_by_face === true,
+  search_by_number: a.search_by_number === true,
+}));
+
+const siteSeedLite = {
+  brand: site.brand,
+  about: site.about
+    ? {
+        title: site.about.title,
+        body: site.about.body,
+        image: site.about.image,
+      }
+    : null,
+  nav: site.nav,
+  projects: (site.projects || []).map((p) => ({
+    id: p.id,
+    slug: p.slug || p.id,
+    title: p.title || p.name,
+    name: p.name || p.title,
+    year: p.year || p.date_label || null,
+    cover: p.cover,
+    summary: p.summary || p.excerpt || null,
+  })),
+  shop: {
+    currencySymbol: site.shop.currencySymbol,
+    pricing: site.shop.pricing || null,
+    albums: shopAlbumsLite,
+    portfolio_intro: site.shop.portfolio_intro,
+    events_title: site.shop.events_title,
+    portfolio_title: site.shop.portfolio_title,
+    events_empty: site.shop.events_empty,
+    intro: site.shop.intro,
+  },
+};
+
+const mediaBase = (import.meta.env.PUBLIC_MEDIA_BASE_URL || '').replace(/\/$/, '');
+const supabaseBase = (import.meta.env.PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
 ---
 
 <!doctype html>
@@ -41,7 +96,32 @@ const fullTitle = title === site.brand.name ? title : `${site.brand.name} - ${ti
     <meta property="og:description" content={description} />
     <meta property="og:image" content={ogImage} />
     <meta name="theme-color" content="#012B55" />
-    <script define:vars={{ shopAlbums: site.shop.albums, seedPricing: site.shop.pricing || null, siteSeed: site }}>
+    {mediaBase ? <link rel="preconnect" href={mediaBase} crossorigin /> : null}
+    {supabaseBase ? <link rel="preconnect" href={supabaseBase} crossorigin /> : null}
+    {supabaseBase ? <link rel="dns-prefetch" href={supabaseBase} /> : null}
+    {
+      lcpImageMobile ? (
+        <link rel="preload" as="image" href={lcpImageMobile} type="image/jpeg" media="(max-width: 932px)" />
+      ) : null
+    }
+    {
+      lcpImage ? (
+        <link
+          rel="preload"
+          as="image"
+          href={lcpImage}
+          type="image/jpeg"
+          media={lcpImageMobile ? '(min-width: 933px)' : undefined}
+        />
+      ) : null
+    }
+    <script
+      define:vars={{
+        shopAlbums: shopAlbumsLite,
+        seedPricing: site.shop.pricing || null,
+        siteSeed: siteSeedLite,
+      }}
+    >
       window.__SOLEPH_SHOP_ALBUMS__ = shopAlbums;
       window.__SOLEPH_SEED_PRICING__ = seedPricing;
       window.__SOLEPH_SITE_SEED__ = siteSeed;
@@ -63,10 +143,23 @@ const fullTitle = title === site.brand.name ? title : `${site.brand.name} - ${ti
         function reveal() {
           b.classList.remove('is-page-loading');
         }
-        if (document.readyState === 'complete') reveal();
-        else window.addEventListener('load', reveal, { once: true });
-        // Fallback si load tarda (imágenes pesadas): mostrar footer tras paint
-        setTimeout(reveal, 900);
+        // Prefer first paint over waiting every image (LCP/FCP). Keep short fallback.
+        if (document.readyState === 'interactive' || document.readyState === 'complete') {
+          requestAnimationFrame(function () {
+            requestAnimationFrame(reveal);
+          });
+        } else {
+          document.addEventListener(
+            'DOMContentLoaded',
+            function () {
+              requestAnimationFrame(function () {
+                requestAnimationFrame(reveal);
+              });
+            },
+            { once: true },
+          );
+        }
+        setTimeout(reveal, 400);
         window.addEventListener('pageshow', function (ev) {
           if (ev.persisted) b.classList.remove('is-navigating', 'is-page-loading');
         });
@@ -86,7 +179,6 @@ const fullTitle = title === site.brand.name ? title : `${site.brand.name} - ${ti
             try {
               var url = new URL(a.href, window.location.href);
               if (url.origin !== window.location.origin) return;
-              // mismo path+query: no es navegación real
               if (url.pathname === window.location.pathname && url.search === window.location.search) return;
             } catch (_) {
               return;

@@ -7,7 +7,12 @@ const lead = paragraphs[0] || '';
 const wa = site.brand.whatsapp_digits || '5492494550855';
 ---
 
-<BaseLayout title="Sobre mí" description={lead} ogImage={site.about.image}>
+<BaseLayout
+  title="Sobre mí"
+  description={lead}
+  ogImage={site.about.image}
+  lcpImage={site.about.image}
+>
   <main class="page page--about" data-about-page>
     <section class="about-hero">
       <div class="about-photo">

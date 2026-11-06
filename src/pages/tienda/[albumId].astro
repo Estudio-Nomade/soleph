@@ -102,7 +102,7 @@ const initialMessage =
               data-unit={unit}
             >
               <button type="button" class="photo-tile-open" data-open-photo aria-label={`Ver #${code} en grande`}>
-                <img src={photo.thumb} alt={`#${code}`} loading="lazy" width="600" height="600" draggable="false" />
+                <img src={photo.thumb} alt={`#${code}`} loading="lazy" decoding="async" width="600" height="600" sizes="(max-width: 639px) 50vw, 33vw" draggable="false" />
                 <span class="wm-overlay" aria-hidden="true" />
               </button>
               <span class="photo-code-badge">#{code}</span>
